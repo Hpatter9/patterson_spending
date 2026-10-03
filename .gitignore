@@ -1,0 +1,12 @@
+# Financial data never goes in git
+out/
+*.csv
+*.ofx
+*.qfx
+.env
+*.env
+secrets*
+
+__pycache__/
+*.pyc
+.venv/

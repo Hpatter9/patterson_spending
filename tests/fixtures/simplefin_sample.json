@@ -1,0 +1,42 @@
+{
+  "errors": [],
+  "accounts": [
+    {
+      "org": {"domain": "examplebank.test", "name": "Example Bank"},
+      "id": "ACT-checking-1",
+      "name": "Everyday Checking (...1111)",
+      "currency": "USD",
+      "balance": "2450.18",
+      "available-balance": "2400.00",
+      "balance-date": 1759449600,
+      "transactions": [
+        {"id": "TX-1", "posted": 1759363200, "amount": "-84.12", "description": "KROGER #123 SPRINGFIELD"},
+        {"id": "TX-2", "posted": 1759276800, "amount": "2150.00", "description": "ACME CORP PAYROLL"},
+        {"id": "TX-3", "posted": 1759190400, "amount": "-500.00", "description": "CREDIT CARD PAYMENT THANK YOU"},
+        {"id": "TX-4", "posted": 1759104000, "amount": "-23.40", "description": "MYSTERY SHOP LLC"}
+      ]
+    },
+    {
+      "org": {"domain": "examplecard.test", "name": "Example Card Co"},
+      "id": "ACT-card-1",
+      "name": "Rewards Visa 2222",
+      "currency": "USD",
+      "balance": "-1320.55",
+      "balance-date": 1759449600,
+      "transactions": [
+        {"id": "TX-5", "posted": 1759363200, "amount": "-15.49", "description": "NETFLIX.COM", "pending": true},
+        {"id": "TX-6", "posted": 1759276800, "amount": "-42.10", "description": "UBER EATS ORDER"},
+        {"id": "TX-7", "posted": 1759190400, "amount": "-18.00", "description": "UBER TRIP"}
+      ]
+    },
+    {
+      "org": {"domain": "exampleauto.test", "name": "Example Auto Finance"},
+      "id": "ACT-loan-1",
+      "name": "Auto Loan 3333",
+      "currency": "USD",
+      "balance": "14200.00",
+      "balance-date": 1759449600,
+      "transactions": []
+    }
+  ]
+}
