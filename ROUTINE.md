@@ -1,10 +1,12 @@
 # Daily sync routine
 
-Prompt for the scheduled Claude routine (fresh session each run, in this repo, with `SIMPLEFIN_ACCESS_URL` set). Replace `<DASHBOARD_URL>` with the dashboard's claude.ai link.
+Prompt for the scheduled Claude routine (fresh session each run, in this repo, with `SIMPLEFIN_ACCESS_URL` set). Dashboard: https://claude.ai/artifact/8Aq4chNUNzxC1oL9jMxuBg (source in `dashboard/index.html`). Replace `<DASHBOARD_URL>` below with it.
 
 ---
 
 Sync the Patterson Spending dashboard at <DASHBOARD_URL>.
+
+0. First real run only: delete every example doc (ids starting `demo_` in accounts, transactions and bills, plus `balances` docs with `demo: true`). Example budgets can stay; they're just starting amounts.
 
 1. Read the dashboard's `rules` collection with ArtifactData `list`. Write it to `out/overrides.json` as `{"<merchant>": "<category>"}`.
 2. Run `python -m sync.main --overrides out/overrides.json`. If it fails, set doc `meta/sync` to `{status: "error", message, at}` and send a push notification with the error. Stop there.
