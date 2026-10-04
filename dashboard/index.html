@@ -156,12 +156,24 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 .msg-err { color: var(--crit); font-size: .85rem; }
 .thinking { color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) { .thinking { animation: pulse 1.4s ease-in-out infinite; } @keyframes pulse { 50% { opacity: .4; } } }
+.proposals { display: grid; gap: 6px; margin-top: 10px; }
+.proposal { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: .9rem; }
+.proposal.pending { border-color: var(--accent); }
+.proposal.dismissed { opacity: .6; }
+.proposal-btns { display: inline-flex; gap: 6px; }
+.proposal-btns .btn { padding: 3px 10px; }
+.proposal-state { color: var(--muted); font-size: .82rem; font-weight: 600; }
+.proposal.applied .proposal-state { color: var(--good); } .proposal.failed .proposal-state { color: var(--crit); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: .85rem; text-align: left; }
 .chip-btn:hover { border-color: var(--accent); }
 .composer { display: flex; gap: 8px; align-items: flex-end; }
 .composer textarea { flex: 1 1 auto; min-width: 0; resize: vertical; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 8px 10px; font: inherit; }
 @media (max-width: 520px) { .msg { max-width: 100%; } }
+.add-acct { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+.add-acct summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.add-acct[open] { display: grid; gap: 8px; }
+.add-acct .meta { margin: 0; color: var(--muted); font-size: .85rem; }
 .empty { color: var(--muted); padding: 24px 8px; text-align: center; }
 .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--ink); color: var(--bg); padding: 6px 10px; border-radius: 8px; font-size: .8rem; max-width: 240px; }
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: .85rem; z-index: 30; }
@@ -406,6 +418,26 @@ function acctEdit(a, field, label, suffix = "") {
   const v = a[field] ?? "";
   return S.canWrite ? `<label>${label} <input type="number" step="any" min="0" inputmode="decimal" id="${field}-${esc(a.id)}" data-acct="${esc(a.id)}" data-field="${field}" value="${esc(v)}">${suffix}</label>` : (v !== "" ? `<span>${label} ${esc(v)}${suffix}</span>` : "");
 }
+const LIAB_TYPES = new Set(["loan", "credit"]);
+function manualRow(a) {
+  if (!a.manual) return "";
+  const updated = a.updatedAt ? new Date(a.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+  if (!S.canWrite) return `<div class="edit"><span>Added by hand${updated ? ` · updated ${updated}` : ""}</span></div>`;
+  return `<div class="edit"><label>${LIAB_TYPES.has(a.type) ? "Owed $" : "Balance $"} <input type="number" step="0.01" min="0" inputmode="decimal" id="mbal-${esc(a.id)}" data-manual-bal="${esc(a.id)}" value="${Math.abs(+a.balance || 0)}"></label><span>${updated ? `Updated ${updated}` : ""}</span><button class="btn link" data-del-acct="${esc(a.id)}" aria-label="Remove ${esc(a.name)}">Remove</button></div>`;
+}
+function addAccountForm() {
+  if (!S.canWrite) return "";
+  return `<details class="add-acct"><summary>Add an account by hand</summary>
+    <p class="meta">For loans or accounts your bank sync can't reach. Update the balance here when you get a statement. The daily sync won't touch it.</p>
+    <form class="add" id="acctForm">
+      <label>Name<input id="acctName" required maxlength="60" placeholder="Student loan"></label>
+      <label>Type<select id="acctType"><option value="loan">Loan</option><option value="credit">Credit card</option><option value="savings">Savings</option><option value="checking">Checking</option><option value="investment">Investment</option></select></label>
+      <label>Balance or amount owed<input id="acctBal" type="number" min="0" step="0.01" required placeholder="18250.00"></label>
+      <label>APR %<input id="acctApr" type="number" min="0" step="0.01" placeholder="5.5"></label>
+      <label>Monthly payment<input id="acctPay" type="number" min="0" step="0.01" placeholder="250"></label>
+      <button class="btn primary" type="submit">Add account</button>
+    </form></details>`;
+}
 function viewWorth() {
   const byDebt = (a, b) => a.balance - b.balance;
   const assets = S.accounts.filter(isAsset), invest = S.accounts.filter(a => a.type === "investment");
@@ -418,11 +450,11 @@ function viewWorth() {
   const head = (a, extra = "") => `<div><div class="payee">${esc(a.name)}</div><div class="meta">${esc(a.institution)}${a.last4 ? ` · ${esc(a.last4)}` : ""}${extra}${a.business ? ` · <span class="pill">Business</span>` : ""}</div></div><div class="bal">${usd.format(a.balance)}</div>`;
   const utilBar = r => `<div class="util"><b class="fill-${r > 0.5 ? "crit" : r > 0.3 ? "warn" : "good"}" style="width:${Math.min(100, r * 100)}%"></b></div>`;
   const cardHtml = cards.map(c => { const r = c.limit ? -c.balance / c.limit : null;
-    return `<div class="acct">${head(c, r != null ? ` · ${Math.round(r * 100)}% used` : "")}${r != null ? utilBar(r) : ""}<div class="edit">${acctEdit(c, "limit", "Limit $")}${acctEdit(c, "apr", "APR", "%")}</div></div>`; }).join("");
+    return `<div class="acct">${head(c, r != null ? ` · ${Math.round(r * 100)}% used` : "")}${r != null ? utilBar(r) : ""}<div class="edit">${acctEdit(c, "limit", "Limit $")}${acctEdit(c, "apr", "APR", "%")}</div>${manualRow(c)}</div>`; }).join("");
   const loanHtml = loans.map(l => { const p = payoff(l.balance, l.apr, l.payment);
     const txt = !p ? "Add APR and monthly payment to see a payoff date" : p.never ? "Payment doesn't cover interest" :
       `Paid off ${new Date(today.getFullYear(), today.getMonth() + p.months, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · ${usd0.format(p.interest)} interest left`;
-    return `<div class="acct">${head(l)}<div class="edit">${acctEdit(l, "apr", "APR", "%")}${acctEdit(l, "payment", "Payment $")}<span>${txt}</span></div></div>`; }).join("");
+    return `<div class="acct">${head(l)}<div class="edit">${acctEdit(l, "apr", "APR", "%")}${acctEdit(l, "payment", "Payment $")}<span>${txt}</span></div>${manualRow(l)}</div>`; }).join("");
   const group = (title, html, list) => list.length ? `<div class="acct-group"><h3>${title} · ${usd0.format(sum(list))}</h3>${html}</div>` : "";
   return `
   <div class="figures">
@@ -434,7 +466,8 @@ function viewWorth() {
   <div class="cols">
     <section class="panel">
       <div class="panel-head"><h2>Accounts</h2><p>Debts shown as negative balances</p></div>
-      ${S.accounts.length ? group("Cash", assets.map(a => `<div class="acct">${head(a, ` · ${a.type}`)}</div>`).join(""), assets) + group("Investments", invest.map(a => `<div class="acct">${head(a)}</div>`).join(""), invest) + group("Credit cards", cardHtml, cards) + group("Loans", loanHtml, loans) : `<p class="empty">No accounts yet. They appear after the first bank sync.</p>`}
+      ${addAccountForm()}
+      ${S.accounts.length ? group("Cash", assets.map(a => `<div class="acct">${head(a, ` · ${a.type}`)}${manualRow(a)}</div>`).join(""), assets) + group("Investments", invest.map(a => `<div class="acct">${head(a)}${manualRow(a)}</div>`).join(""), invest) + group("Credit cards", cardHtml, cards) + group("Loans", loanHtml, loans) : `<p class="empty">No accounts yet. They appear after the first bank sync.</p>`}
     </section>
     <section class="panel">
       <div class="panel-head"><h2>Net worth over time</h2><p>One point per daily sync</p></div>
@@ -794,6 +827,7 @@ const SUGGESTIONS = [
   "Where did we overspend last month?",
   "Which debt should we pay off first?",
   "How many months of expenses does our savings cover?",
+  "Set budgets for next month based on what we usually spend",
   "Can the business afford a $1,200 keyboard this quarter?",
 ];
 function financeSnapshot() {
@@ -848,6 +882,7 @@ How to answer:
 - Lead with the direct answer in one or two sentences, then the supporting numbers.
 - For a planned purchase: give 2-3 concrete ways to fit it in, using their real figures. For example: pay from savings and what that leaves; set aside a monthly amount for N months, naming which categories to trim and by how much, based on where they usually spend under or over budget; or split it. Then recommend one, with a target date. Flag high-APR card debt if paying that down first would be wiser. Don't suggest financing at a rate higher than their savings earn unless there's no other way.
 - Keep it short: under about 180 words unless they ask for detail. Use short bullet lists and **bold** for key numbers. No tables, no headings.
+- You can propose changes with the propose_* tools (budgets, bills, paid status, categories, account APR/limit/payment, balances of hand-added accounts) when the person asks for a change or clearly agrees to one. Nothing is saved until they tap Apply under your answer, so say plainly what you proposed and that they need to tap Apply. Never claim a change is already made. If a tool reports a problem, explain it.
 - Be practical and kind, not preachy. Mention you're not a licensed financial advisor only when the question is about investing, taxes or legal matters.
 
 - Business questions use the BUSINESS section. Money for a business purchase should come from business cash and profit after the tax set-aside, not household savings, unless they ask.
@@ -883,12 +918,85 @@ const AI_ERRORS = {
   refused: "Claude couldn't answer that one. Try rephrasing.",
   session_expired: "Your claude.ai sign-in expired. Reload the page.",
 };
+/* Changes the companion may propose. Nothing is written until the viewer taps Apply. */
+const findByName = (list, name, what) => {
+  const q = String(name || "").trim().toLowerCase();
+  const hits = list.filter(x => x.name?.toLowerCase() === q);
+  const loose = hits.length ? hits : list.filter(x => x.name?.toLowerCase().includes(q) || (x.last4 && q.includes(x.last4)));
+  if (loose.length === 1) return loose[0];
+  const names = list.map(x => x.name + (x.last4 ? ` (${x.last4})` : "")).slice(0, 40).join("; ");
+  throw new Error(loose.length ? `"${name}" matches several ${what}: ${loose.map(x => x.name + (x.last4 ? ` (${x.last4})` : "")).join("; ")}. Ask which one.` : `No ${what} named "${name}". Known ${what}: ${names || "none"}.`);
+};
+const money = v => { const n = Math.abs(parseFloat(v)); if (isNaN(n)) throw new Error("Amount must be a number."); return Math.round(n * 100) / 100; };
+function proposeTools(reply) {
+  const propose = (label, apply) => { reply.actions.push({ label, apply, state: "pending" }); return { proposed: label, note: "Shown to the person with an Apply button. Not saved yet." }; };
+  return [
+    { name: "propose_set_budget", description: "Propose setting a category's monthly budget. A limit of 0 removes the budget.",
+      inputSchema: { type: "object", properties: { category: { type: "string", enum: CATEGORIES.filter(c => !NOT_SPENDING.has(c)) }, monthly_limit: { type: "number" } }, required: ["category", "monthly_limit"] },
+      execute({ category, monthly_limit }) {
+        if (!CATEGORIES.includes(category) || NOT_SPENDING.has(category)) throw new Error(`Unknown spending category "${category}".`);
+        const v = money(monthly_limit), id = slug(category);
+        return propose(v ? `Set ${category} budget to ${usd0.format(v)}/month` : `Remove the ${category} budget`,
+          db => v ? db.doc(`budgets/${id}`).set({ category, limit: v }) : db.doc(`budgets/${id}`).delete());
+      } },
+    { name: "propose_add_bill", description: "Propose adding a recurring monthly bill.",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, due_day: { type: "integer", minimum: 1, maximum: 31 }, amount: { type: "number" }, autopay: { type: "boolean" } }, required: ["name", "due_day", "amount"] },
+      execute({ name, due_day, amount, autopay }) {
+        name = String(name || "").trim().slice(0, 60); const day = Math.min(31, Math.max(1, parseInt(due_day, 10) || 1)), amt = money(amount);
+        if (!name) throw new Error("A bill needs a name.");
+        return propose(`Add bill "${name}": ${usd.format(amt)} due on day ${day}${autopay ? ", autopay" : ""}`,
+          db => db.collection("bills").add({ name, dueDay: day, amount: amt, autopay: !!autopay, accountId: null, paidMonth: null }));
+      } },
+    { name: "propose_mark_bill_paid", description: "Propose marking a bill paid (or unpaid) for this month.",
+      inputSchema: { type: "object", properties: { bill_name: { type: "string" }, paid: { type: "boolean" } }, required: ["bill_name"] },
+      execute({ bill_name, paid = true }) {
+        const b = findByName(S.bills, bill_name, "bills");
+        return propose(`Mark ${b.name} ${paid ? "paid" : "unpaid"} for ${monthName(thisMonth).split(" ")[0]}`,
+          db => db.doc(`bills/${b.id}`).update({ paidMonth: paid ? thisMonth : null }));
+      } },
+    { name: "propose_recategorize", description: "Propose moving every transaction whose merchant contains some text into a category (optionally only one month), and remembering that for future charges.",
+      inputSchema: { type: "object", properties: { merchant_text: { type: "string", description: "Text found in the merchant name, e.g. 'link.com'" }, category: { type: "string", enum: CATEGORIES }, month: { type: "string", description: "Optional YYYY-MM" } }, required: ["merchant_text", "category"] },
+      execute({ merchant_text, category, month }) {
+        const q = String(merchant_text || "").trim().toUpperCase();
+        if (q.length < 3) throw new Error("Merchant text must be at least 3 characters.");
+        if (!CATEGORIES.includes(category)) throw new Error(`Unknown category "${category}".`);
+        const hits = S.txns.filter(t => `${t.payee} ${t.description}`.toUpperCase().includes(q) && (!month || t.date?.startsWith(month)) && t.category !== category).slice(0, 150);
+        if (!hits.length) throw new Error(`No transactions matching "${merchant_text}" that aren't already ${category}.`);
+        const remember = !month && !NOT_SPENDING.has(category) && category !== "Uncategorized";
+        return propose(`Move ${hits.length} "${merchant_text}" transaction${hits.length === 1 ? "" : "s"} to ${category}${remember ? " and remember it" : ""}`, async db => {
+          for (const t of hits) await db.doc(`transactions/${t.id}`).update({ category, categoryLocked: true });
+          if (remember) await db.doc(`rules/${slug(q)}`).set({ merchant: q, category });
+        });
+      } },
+    { name: "propose_update_account", description: "Propose updating an account's APR, credit limit or monthly payment. A balance can only be set on accounts added by hand (the bank sync owns the rest); for debts give the amount owed as a positive number.",
+      inputSchema: { type: "object", properties: { account_name: { type: "string", description: "Name, optionally with last 4 digits" }, apr: { type: "number" }, credit_limit: { type: "number" }, monthly_payment: { type: "number" }, balance: { type: "number" } }, required: ["account_name"] },
+      execute({ account_name, apr, credit_limit, monthly_payment, balance }) {
+        const a = findByName(S.accounts, account_name, "accounts"), patch = {}, parts = [];
+        if (apr != null) { patch.apr = money(apr); parts.push(`APR ${patch.apr}%`); }
+        if (credit_limit != null) { patch.limit = money(credit_limit); parts.push(`limit ${usd0.format(patch.limit)}`); }
+        if (monthly_payment != null) { patch.payment = money(monthly_payment); parts.push(`payment ${usd0.format(patch.payment)}/mo`); }
+        if (balance != null) {
+          if (!a.manual) throw new Error(`${a.name} comes from the bank sync, so its balance can't be edited. Only accounts added by hand can be.`);
+          const v = money(balance); patch.balance = LIAB_TYPES.has(a.type) ? -v : v; patch.updatedAt = new Date().toISOString(); patch.balanceDate = patch.updatedAt.slice(0, 10);
+          parts.push(`${LIAB_TYPES.has(a.type) ? "owed" : "balance"} ${usd.format(v)}`);
+        }
+        if (!parts.length) throw new Error("Nothing to change.");
+        return propose(`Update ${a.name}${a.last4 ? ` (${a.last4})` : ""}: ${parts.join(", ")}`, db => db.doc(`accounts/${a.id}`).update(patch));
+      } },
+  ];
+}
+function actionsHtml(m, i) {
+  if (!m.actions?.length) return "";
+  return `<div class="proposals">${m.actions.map((a, j) => `<div class="proposal ${a.state}"><span>${esc(a.label)}</span>${
+    a.state === "pending" ? `<span class="proposal-btns"><button class="btn primary" data-apply="${i}:${j}">Apply</button><button class="btn" data-dismiss="${i}:${j}">Dismiss</button></span>`
+    : `<span class="proposal-state">${a.state === "applied" ? "Applied" : a.state === "working" ? "Saving…" : a.state === "failed" ? "Couldn't save" : "Dismissed"}</span>`}</div>`).join("")}</div>`;
+}
 function viewAsk() {
   if (S.sample === null) return `<section class="panel"><h2>Ask about your money</h2><p class="empty">The companion only works when this page is open on claude.ai while you're signed in.</p></section>`;
-  const msgs = S.chat.map((m, i) => `<div class="msg ${m.role}">${m.role === "user" ? esc(m.content) : m.content ? md(m.content) : `<span class="thinking">Thinking…</span>`}${m.error ? `<p class="msg-err">${esc(m.error)}</p>` : ""}</div>`).join("");
+  const msgs = S.chat.map((m, i) => `<div class="msg ${m.role}">${m.role === "user" ? esc(m.content) : m.content ? md(m.content) : `<span class="thinking">Thinking…</span>`}${m.error ? `<p class="msg-err">${esc(m.error)}</p>` : ""}${actionsHtml(m, i)}</div>`).join("");
   return `<section class="panel ask">
     <div class="panel-head"><h2>Ask about your money</h2><p>Answers use the numbers on this dashboard${S.chat.length ? ` · <button class="btn link" id="chatClear">Clear</button>` : ""}</p></div>
-    <div class="thread" id="thread">${msgs || `<p class="intro">Ask anything about your spending, debts or bills, or name something you want to buy and get a plan for fitting it in.</p>`}</div>
+    <div class="thread" id="thread">${msgs || `<p class="intro">Ask anything about your spending, debts or bills, or name something you want to buy and get a plan for fitting it in. You can also ask for changes, like new budgets or bills. Each one waits for you to tap Apply.</p>`}</div>
     ${S.chat.length ? "" : `<div class="chips">${SUGGESTIONS.map(s => `<button class="chip-btn" data-suggest="${esc(s)}">${esc(s)}</button>`).join("")}</div>`}
     <form class="composer" id="askForm">
       <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. Can we afford a $2,345 e-bike this spring?" aria-label="Your question">${esc(S.draft)}</textarea>
@@ -900,7 +1008,7 @@ async function ask(question) {
   question = question.trim();
   if (!question || S.asking || !S.sample) return;
   S.chat.push({ role: "user", content: question });
-  const reply = { role: "assistant", content: "" };
+  const reply = { role: "assistant", content: "", actions: [] };
   S.chat.push(reply);
   S.draft = ""; S.asking = new AbortController();
   render(true); scrollThread();
@@ -909,7 +1017,7 @@ async function ask(question) {
   const input = [{ role: "user", content: COMPANION_RULES + financeSnapshot() }, ...history];
   const bubble = () => document.querySelector("#thread .msg.assistant:last-child");
   const opts = { signal: S.asking.signal, onText: ({ text }) => { reply.content = text; const b = bubble(); if (b) b.innerHTML = md(text); scrollThread(); } };
-  if (S.sampleTools) opts.tools = [findTool]; else opts.cache = false;
+  if (S.sampleTools) opts.tools = [findTool, ...(S.canWrite && S.db ? proposeTools(reply) : [])]; else opts.cache = false;
   try {
     const { text, truncated } = await S.sample(input, opts);
     reply.content = text;
@@ -965,6 +1073,15 @@ document.querySelector("nav.tabs").addEventListener("click", e => {
 });
 const app = document.getElementById("app");
 app.addEventListener("click", e => {
+  const ap = e.target.closest("[data-apply],[data-dismiss]");
+  if (ap) {
+    const [i, j] = (ap.dataset.apply || ap.dataset.dismiss).split(":").map(Number), act = S.chat[i]?.actions?.[j];
+    if (!act || act.state !== "pending") return;
+    if (ap.dataset.dismiss) { act.state = "dismissed"; render(true); return; }
+    act.state = "working"; render(true);
+    write(async db => { try { await act.apply(db); act.state = "applied"; } catch (err) { act.state = "failed"; throw err; } finally { render(true); } }, "Saved");
+    return;
+  }
   const sug = e.target.closest("[data-suggest]"); if (sug) { ask(sug.dataset.suggest); return; }
   if (e.target.id === "askStop") { S.asking?.abort(); return; }
   if (e.target.id === "chatClear") { S.chat = []; render(true); return; }
@@ -984,6 +1101,12 @@ app.addEventListener("click", e => {
   if (rm) {
     if (rm.dataset.confirm) write(db => db.doc(rm.dataset.remove).delete(), "Removed");
     else { rm.dataset.confirm = "1"; rm.textContent = "Confirm remove"; rm.style.color = "var(--crit)"; }
+    return;
+  }
+  const delA = e.target.closest("[data-del-acct]");
+  if (delA) {
+    if (delA.dataset.confirm) write(db => db.doc(`accounts/${delA.dataset.delAcct}`).delete(), "Account removed");
+    else { delA.dataset.confirm = "1"; delA.textContent = "Confirm remove"; delA.style.color = "var(--crit)"; }
     return;
   }
   const del = e.target.closest("[data-del]");
@@ -1031,6 +1154,11 @@ app.addEventListener("change", e => {
     const f = t.dataset.bizset, v = f === "defaultLine" ? t.value : parseFloat(t.value);
     if (f === "defaultLine" || (!isNaN(v) && v >= 0)) writeBiz({ [f]: v }, "Saved");
   }
+  if (t.dataset.manualBal) {
+    const a = S.accounts.find(x => x.id === t.dataset.manualBal), v = Math.abs(parseFloat(t.value));
+    if (!a || isNaN(v)) return;
+    write(db => db.doc(`accounts/${a.id}`).update({ balance: LIAB_TYPES.has(a.type) ? -v : v, updatedAt: new Date().toISOString(), balanceDate: new Date().toISOString().slice(0, 10) }), "Balance updated");
+  }
   if (t.dataset.paid) write(db => db.doc(`bills/${t.dataset.paid}`).update({ paidMonth: t.checked ? thisMonth : null }), t.checked ? "Marked paid" : "Marked unpaid");
 });
 const val = id => document.getElementById(id).value;
@@ -1064,6 +1192,17 @@ app.addEventListener("submit", e => {
     e.preventDefault();
     const name = val("lineName").trim().slice(0, 40), lines = biz().serviceLines;
     if (name && name !== SHARED && !lines.includes(name)) writeBiz({ serviceLines: [...lines, name] }, `Added ${name}`);
+    return;
+  }
+  if (e.target.id === "acctForm") {
+    e.preventDefault();
+    const name = document.getElementById("acctName").value.trim(), type = document.getElementById("acctType").value;
+    const bal = Math.abs(parseFloat(document.getElementById("acctBal").value)), num = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
+    if (!name || isNaN(bal)) return;
+    const now = new Date().toISOString();
+    const doc = { name, type, institution: "Added by hand", last4: "", manual: true, balance: LIAB_TYPES.has(type) ? -bal : bal,
+      apr: num("acctApr"), payment: num("acctPay"), currency: "USD", balanceDate: now.slice(0, 10), updatedAt: now };
+    write(async db => { await db.doc(`accounts/m_${slug(name).slice(0, 40)}-${Math.random().toString(36).slice(2, 6)}`).set(doc); e.target.reset(); }, `${name} added`);
     return;
   }
   if (f.id !== "billForm") return;

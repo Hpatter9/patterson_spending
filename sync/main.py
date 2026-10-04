@@ -19,7 +19,7 @@ from .simplefin import claim_setup_token, fetch_accounts
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--days", type=int, default=45, help="how many days of transactions to pull")
+    p.add_argument("--days", type=int, default=44, help="how many days of transactions to pull")
     p.add_argument("--fixture", help="read a saved SimpleFIN response instead of calling the API")
     p.add_argument("--rules", default=str(DEFAULT_RULES))
     p.add_argument("--overrides", help="JSON file of merchant -> category rules saved from the dashboard")
