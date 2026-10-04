@@ -232,7 +232,7 @@ const SPACES = {
   home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["ask", "Ask"]] },
   biz: { title: "Get In Tune", sub: "Therapy & coaching for life's big changes", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["ask", "Ask"]] },
 };
-const S = { space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
+const S = { space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
   invoices: [], mileage: [], taxPayments: [], bizMeta: null, bizSub: "overview", bizSearch: "", bizTodo: false,
   ready: { accounts: false, txns: false }, sample: undefined, sampleTools: false, chat: [], draft: "", asking: null, whereMonth: null, search: "", catFilter: "", error: null };
 
@@ -1051,7 +1051,65 @@ function askUnavailable() {
     : "Ask isn't available in this view of the page. Open the dashboard link in the Claude app or at claude.ai in a web browser. A home-screen shortcut can open a stripped-down copy. If it's still unavailable there, this Claude account may not have the feature yet. Everything else on the dashboard still works.";
   return `<section class="panel"><h2>Ask about your money</h2><p class="intro">${why}</p>${S.perms ? `<div><button class="btn" id="permsBtn">Check permissions</button></div>` : ""}</section>`;
 }
+/* ---------- answer queue: Ask for viewers whose account can't call Claude live ---------- */
+// The page saves a complete prompt; an hourly routine on the owner's account answers it (see ASK_QUEUE.md).
+const QUEUE_ACTIONS_HELP = `
+You cannot call tools in this mode. If the person asks for a change (or clearly agrees to one), propose it by ending your reply with a fenced block that starts with \`\`\`actions and contains a JSON array like:
+[{"tool": "propose_set_budget", "input": {"category": "Dining", "monthly_limit": 400}}]
+Available tools and inputs: propose_set_budget {category, monthly_limit}; propose_add_bill {name, due_day, amount, autopay}; propose_mark_bill_paid {bill_name, paid}; propose_recategorize {merchant_text, category, month?}; propose_update_account {account_name, apr?, credit_limit?, monthly_payment?, balance?}. Each one appears with an Apply button; nothing is saved until they tap it. Say so in your reply.`;
+function queuePrompt(text) {
+  const mine = S.questions.filter(q => q.askedBy === S.me && q.space === S.space && q.status === "answered").slice(0, 4).reverse();
+  const history = mine.map(q => `EARLIER QUESTION: ${q.text}\nYOUR EARLIER ANSWER: ${q.answer}`).join("\n\n");
+  const focus = S.space === "biz" ? "The person is on the Get In Tune side of the dashboard (Marlys's practice). Answer from the BUSINESS section unless they ask about the household."
+    : "The person is on the personal (household) side of the dashboard.";
+  return `${COMPANION_RULES}${financeSnapshot()}\n\n${focus}\n${QUEUE_ACTIONS_HELP}\n\n${history ? history + "\n\n" : ""}QUESTION (asked ${new Date().toLocaleString("en-US")}): ${text}`;
+}
+async function sendQueued(text) {
+  text = String(text || "").trim().slice(0, 1000);
+  if (!text || !S.db) return;
+  S.draft = "";
+  write(db => db.collection("questions").add({ text, space: S.space, askedBy: S.me || null, askedAt: new Date().toISOString(), status: "waiting", prompt: queuePrompt(text) }), "Question sent");
+}
+const queuedActions = new Map(); // question id + answeredAt -> built proposals
+function actionsFor(q) {
+  const key = q.id + (q.answeredAt || "");
+  if (!queuedActions.has(key)) {
+    const holder = { actions: [] }, tools = proposeTools(holder);
+    for (const a of Array.isArray(q.actions) ? q.actions.slice(0, 10) : []) {
+      const t = tools.find(x => x.name === a?.tool);
+      try { if (t) t.execute(a.input || {}); } catch (err) { holder.actions.push({ label: `Couldn't prepare a suggested change: ${err.message}`, state: "failed" }); }
+    }
+    queuedActions.set(key, holder.actions);
+  }
+  const done = q.actionsDone || {};
+  return queuedActions.get(key).map((a, j) => ({ ...a, state: done[j] || a.state }));
+}
+function viewQueue() {
+  const qs = S.questions.filter(q => q.space === S.space && (!S.me || q.askedBy === S.me)).slice().reverse();
+  const waiting = qs.some(q => q.status === "waiting");
+  const thread = qs.map(q => {
+    const acts = q.status === "answered" ? actionsFor(q) : [];
+    const answer = q.status === "answered" ? md(q.answer || "")
+      : q.status === "error" ? `<p class="msg-err">${esc(q.message || "This one couldn't be answered. Try asking again.")}</p>`
+      : `<span class="thinking">Waiting for an answer. Usually within the hour, 7am to 10pm.</span>`;
+    const actsHtml = acts.length ? `<div class="proposals">${acts.map((a, j) => `<div class="proposal ${a.state}"><span>${esc(a.label)}</span>${
+      a.state === "pending" && S.canWrite ? `<span class="proposal-btns"><button class="btn primary" data-qapply="${esc(q.id)}:${j}">Apply</button><button class="btn" data-qdismiss="${esc(q.id)}:${j}">Dismiss</button></span>`
+      : `<span class="proposal-state">${a.state === "applied" ? "Applied" : a.state === "dismissed" ? "Dismissed" : a.state === "failed" ? "Couldn't save" : ""}</span>`}</div>`).join("")}</div>` : "";
+    return `<div class="msg user">${esc(q.text)}</div><div class="msg assistant">${answer}${actsHtml}${q.status === "waiting" && S.canWrite ? `<p style="margin-top:6px"><button class="btn link" data-qremove="${esc(q.id)}">Cancel question</button></p>` : ""}</div>`;
+  }).join("");
+  const sugg = S.space === "biz" ? BIZ_SUGGESTIONS : SUGGESTIONS;
+  return `<section class="panel ask">
+    <div class="panel-head"><h2>Ask about your money</h2><p>Answered by Claude on the household's main account</p></div>
+    <div class="thread" id="thread">${thread || `<p class="intro">Live answers aren't available on this Claude account, so your questions go to Claude on the household's main account. Answers appear here, usually within the hour between 7am and 10pm. You can ask about spending, bills, Get In Tune's numbers, or ask for changes like a new budget. Changes wait for you to tap Apply.</p>`}</div>
+    ${qs.length ? "" : `<div class="chips">${sugg.map(s => `<button class="chip-btn" data-qsuggest="${esc(s)}">${esc(s)}</button>`).join("")}</div>`}
+    ${S.canWrite ? `<form class="composer" id="queueForm">
+      <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. How much did we spend on dining in September?" aria-label="Your question">${esc(S.draft)}</textarea>
+      <button class="btn primary" type="submit">Send</button>
+    </form>${waiting ? `<p class="privacy">You can close the page. The answer will be here when you come back.</p>` : ""}` : `<p class="privacy">You have view-only access, so you can't send questions.</p>`}
+  </section>`;
+}
 function viewAsk() {
+  if ((S.sample === null || S.askBlock === "sampling_disabled") && S.db) return viewQueue();
   if (S.sample === null || S.askBlock) return askUnavailable();
   const msgs = S.chat.map((m, i) => `<div class="msg ${m.role}">${m.role === "user" ? esc(m.content) : m.content ? md(m.content) : `<span class="thinking">Thinking…</span>`}${m.error ? `<p class="msg-err">${esc(m.error)}</p>` : ""}${actionsHtml(m, i)}</div>`).join("");
   return `<section class="panel ask">
@@ -1182,6 +1240,17 @@ document.querySelector("nav.tabs").addEventListener("click", e => {
 document.getElementById("spaceSel").addEventListener("change", e => { setSpace(e.target.value); render(true); window.scrollTo({ top: 0 }); });
 const app = document.getElementById("app");
 app.addEventListener("click", e => {
+  const qa = e.target.closest("[data-qapply],[data-qdismiss]");
+  if (qa) {
+    const raw = qa.dataset.qapply || qa.dataset.qdismiss, cut = raw.lastIndexOf(":"), id = raw.slice(0, cut), j = +raw.slice(cut + 1);
+    const q = S.questions.find(x => x.id === id), act = q && actionsFor(q)[j];
+    if (!act || act.state !== "pending") return;
+    if (qa.dataset.qdismiss) { write(db => db.doc(`questions/${id}`).update({ actionsDone: { [j]: "dismissed" } })); return; }
+    write(async db => { try { await act.apply(db); await db.doc(`questions/${id}`).update({ actionsDone: { [j]: "applied" } }); } catch (err) { await db.doc(`questions/${id}`).update({ actionsDone: { [j]: "failed" } }); throw err; } }, "Saved");
+    return;
+  }
+  const qs = e.target.closest("[data-qsuggest]"); if (qs) { sendQueued(qs.dataset.qsuggest); return; }
+  const qr = e.target.closest("[data-qremove]"); if (qr) { write(db => db.doc(`questions/${qr.dataset.qremove}`).delete(), "Question cancelled"); return; }
   const ap = e.target.closest("[data-apply],[data-dismiss]");
   if (ap) {
     const [i, j] = (ap.dataset.apply || ap.dataset.dismiss).split(":").map(Number), act = S.chat[i]?.actions?.[j];
@@ -1284,6 +1353,7 @@ function writeBiz(patch, msg) {
 }
 app.addEventListener("submit", e => {
   const f = e.target;
+  if (f.id === "queueForm") { e.preventDefault(); sendQueued(document.getElementById("askInput").value); return; }
   if (f.id === "askForm") { e.preventDefault(); ask(document.getElementById("askInput").value); return; }
   if (f.id === "invForm") {
     e.preventDefault();
@@ -1333,7 +1403,7 @@ app.addEventListener("submit", e => {
 document.addEventListener("keydown", e => { if (e.key === "Escape" && S.detail) closeDetail(); });
 app.addEventListener("keydown", e => {
   if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("[data-detail]")) { e.preventDefault(); openDetail(e.target); return; }
-  if (e.target.id === "askInput" && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(e.target.value); }
+  if (e.target.id === "askInput" && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (document.getElementById("queueForm")) sendQueued(e.target.value); else ask(e.target.value); }
 });
 app.addEventListener("focusout", () => setTimeout(() => { if (pendingRender) render(); }, 0));
 
@@ -1372,7 +1442,7 @@ async function start() {
   const db = await window.claude?.use?.("db");
   if (!db) { render(true); return; }
   S.db = db;
-  try { const user = await window.claude.use("user"); const w = user?.can?.("data.write"); if (w === false) S.canWrite = false; } catch (e) {}
+  try { const user = await window.claude.use("user"); const w = user?.can?.("data.write"); if (w === false) S.canWrite = false; S.me = await user?.id?.() ?? null; } catch (e) {}
   const cutoff = `${lastMonths(7)[0]}-01`;
   db.collection("accounts").onSnapshot(s => { S.accounts = docs(s).sort((a, b) => (a.institution + a.name).localeCompare(b.institution + b.name)); S.ready.accounts = true; splitTxns(); watchBiz(); render(); }, fail);
   db.collection("transactions").where("date", ">=", cutoff).orderBy("date", "desc").limit(1000).onSnapshot(s => { S.allTxns = docs(s); splitTxns(); S.ready.txns = true; render(); }, fail);
@@ -1383,6 +1453,7 @@ async function start() {
   db.collection("balances").orderBy("date", "desc").limit(400).onSnapshot(s => { S.balances = docs(s); render(); }, fail);
   db.collection("budgets").onSnapshot(s => { S.budgets = docs(s); render(); }, fail);
   db.collection("bills").onSnapshot(s => { S.bills = docs(s); render(); }, fail);
+  db.collection("questions").orderBy("askedAt", "desc").limit(60).onSnapshot(s => { S.questions = docs(s); if (S.tab === "ask") render(); }, () => {});
   db.doc("meta/sync").onSnapshot(s => { S.meta = s.exists ? s.data() : null; render(); }, () => {});
 }
 start();

@@ -18,6 +18,8 @@ Household and business budget tracker for the Patterson family. Several Claude s
 
 ## Current state
 **Bank sync.** The routine "Patterson Spending daily sync" (`trig_01V6M5B6nfb3KVZThyC58i7n`) runs at 5:49am America/Denver in the sync runner session. It follows `ROUTINE.md`, so change the steps there, not in the trigger.
+
+**Ask answer queue.** Viewers whose account can't run live Ask (her free account) get a send-a-question box. The routine "Patterson Spending: answer Ask questions" (`trig_01KMWWxzE85d8cXu7dxwXJzw`) runs hourly from 7am to 10pm Mountain in the same runner session, on the owner's account, and follows `ASK_QUEUE.md`.
 - `sync/` pulls from SimpleFIN (`SIMPLEFIN_ACCESS_URL` is set in the environment settings) and categorizes with `sync/rules.json` for household accounts and `sync/business_rules.json` for business accounts.
 - `sync/plan_writes.py` turns `out/sync.json` into database batches. The database refuses changes to an existing row unless the write names the row's version, so new rows are sent as-is and changed rows go in a second pass with their versions.
 
@@ -26,6 +28,7 @@ Household and business budget tracker for the Patterson family. Several Claude s
 - `transactions`, `balances/{date}`, `meta/sync`: written by the sync.
 - `budgets`, `bills`, `rules`: edited on the page. A `rules` doc with `scope: "business"` is a business merchant rule.
 - `invoices`, `mileage`, `taxPayments`, `meta/business`: Business tab.
+- `questions`: the Ask answer queue (see `ASK_QUEUE.md`).
 
 **Account types:** checking, savings, credit, loan, investment, and hidden (duplicates or $0 policies, set in `rules.json` → `account_types`).
 
