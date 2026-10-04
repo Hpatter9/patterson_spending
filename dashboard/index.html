@@ -174,6 +174,19 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 .add-acct summary { cursor: pointer; font-weight: 600; color: var(--accent); }
 .add-acct[open] { display: grid; gap: 8px; }
 .add-acct .meta { margin: 0; color: var(--muted); font-size: .85rem; }
+.clickable { cursor: pointer; border-radius: 6px; }
+.clickable:hover { background: var(--accent-soft); }
+.budget-row.clickable { padding: 4px 6px; margin: -4px -6px; }
+.sheet-backdrop { position: fixed; inset: 0; z-index: 40; background: color-mix(in srgb, var(--ink) 45%, transparent); }
+.sheet { position: fixed; z-index: 41; left: 50%; top: calc(24px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: min(680px, calc(100% - 32px)); max-height: calc(100% - 48px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 16px; align-content: start; box-shadow: 0 12px 40px color-mix(in srgb, var(--ink) 25%, transparent); }
+.sheet .figures { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.sheet .fig { padding: 10px 12px; }
+.sheet .fig .value { font-size: 1.3rem; }
+.sheet .fig .label { font-size: .68rem; }
+.sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.sheet-head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
+.sheet-sub { font-size: .8rem; font-family: var(--font-body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+@media (max-width: 560px) { .sheet { top: auto; bottom: 0; left: 0; transform: none; width: 100%; max-height: 88%; border-radius: 16px 16px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); } }
 .empty { color: var(--muted); padding: 24px 8px; text-align: center; }
 .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--ink); color: var(--bg); padding: 6px 10px; border-radius: 8px; font-size: .8rem; max-width: 240px; }
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: .85rem; z-index: 30; }
@@ -326,7 +339,7 @@ function viewMonth() {
   const rows = cats.map(c => {
     const sp = spent.get(c) || 0, lim = +budgets.get(c)?.limit || 0, st = budgetStatus(sp, lim);
     const w = lim ? Math.min(100, (sp / lim) * 100) : 0;
-    return `<div class="budget-row">
+    return `<div class="budget-row clickable" ${detailAttrs("cat", c, thisMonth)}>
       <div class="name">${esc(c)}${st ? `<span class="status s-${st[0]}">${st[1]}</span>` : `<span class="status" style="color:var(--muted)">No budget</span>`}</div>
       <div class="nums">${usd0.format(sp)} of ${S.canWrite ? `<input class="limit-input" type="number" min="0" step="10" inputmode="decimal" id="lim-${slug(c)}" data-cat="${esc(c)}" value="${lim || ""}" placeholder="set" aria-label="Monthly budget for ${esc(c)}">` : usd0.format(lim)}</div>
       <div class="track">${lim ? `<b class="fill-${st[0]}" style="width:${w}%"></b><span class="pace" style="left:${pace * 100}%" title="Where you'd be at an even pace"></span>` : ""}</div>
@@ -372,13 +385,13 @@ function viewWhere() {
   <div class="cols">
     <section class="panel">
       <div class="panel-head"><h2>${monthName(month)}</h2><p>${usd0.format(tot)} spent, transfers and income excluded</p></div>
-      ${list.length ? list.map(([c, v]) => `<div class="hbar" data-tip="${esc(c)}: ${esc(usd.format(v))} (${Math.round(v / tot * 100)}% of spending)"><span class="cat">${esc(c)}</span><div><div class="bar" style="width:${(v / max) * 100}%"></div></div><span class="amt">${usd0.format(v)}</span></div>`).join("") : `<p class="empty">No spending recorded for this month.</p>`}
+      ${list.length ? list.map(([c, v]) => `<div class="hbar clickable" ${detailAttrs("cat", c, month)} data-tip="${esc(c)}: ${esc(usd.format(v))} (${Math.round(v / tot * 100)}% of spending)"><span class="cat">${esc(c)}</span><div><div class="bar" style="width:${(v / max) * 100}%"></div></div><span class="amt">${usd0.format(v)}</span></div>`).join("") : `<p class="empty">No spending recorded for this month.</p>`}
     </section>
     <section class="panel">
       <div class="panel-head"><h2>Last six months</h2><p>Select a bar to view that month</p></div>
       ${monthBars(months, months.map(m => total(spendByCat(m))), month)}
       <h2 style="font-size:1rem">Top merchants</h2>
-      ${topM.length ? `<table><tbody>${topM.map(([k, m]) => `<tr><td class="payee">${esc(k)}<small>${m.n} purchase${m.n === 1 ? "" : "s"}</small></td><td class="num">${usd.format(m.v)}</td></tr>`).join("")}</tbody></table>` : `<p class="empty">No merchants yet.</p>`}
+      ${topM.length ? `<table><tbody>${topM.map(([k, m]) => `<tr class="clickable" ${detailAttrs("merchant", k, month)}><td class="payee">${esc(k)}<small>${m.n} purchase${m.n === 1 ? "" : "s"}</small></td><td class="num">${usd.format(m.v)}</td></tr>`).join("")}</tbody></table>` : `<p class="empty">No merchants yet.</p>`}
     </section>
   </div>
   <section class="panel">
@@ -641,7 +654,7 @@ function viewBizOverview() {
   </div>
   <section class="panel">
     <div class="panel-head"><h2>Where business money goes</h2><p>${year} so far · ${usd0.format(ytd.expense + ytd.mileage)}</p></div>
-    ${cats.length ? cats.map(([c, v]) => `<div class="hbar" data-tip="${esc(c)}: ${esc(usd.format(v))}"><span class="cat">${esc(c)}</span><div><div class="bar" style="width:${(v / max) * 100}%"></div></div><span class="amt">${usd0.format(v)}</span></div>`).join("") : `<p class="empty">No business expenses yet this year.</p>`}
+    ${cats.length ? cats.map(([c, v]) => `<div class="hbar ${c === "Mileage" ? "" : "clickable"}" ${c === "Mileage" ? "" : detailAttrs("cat", c, "ytd", "biz")} data-tip="${esc(c)}: ${esc(usd.format(v))}"><span class="cat">${esc(c)}</span><div><div class="bar" style="width:${(v / max) * 100}%"></div></div><span class="amt">${usd0.format(v)}</span></div>`).join("") : `<p class="empty">No business expenses yet this year.</p>`}
   </section>
   <section class="panel">
     <div class="panel-head"><h2>Business transactions</h2><p>${S.canWrite ? "Changing a category teaches future charges from that merchant" : ""}</p></div>
@@ -1040,6 +1053,53 @@ async function ask(question) {
 }
 function scrollThread() { const t = document.getElementById("thread"); if (t) t.scrollTop = t.scrollHeight; }
 
+/* ---------- drill-down sheet ---------- */
+// S.detail = { kind: "cat" | "merchant", key, month ("YYYY-MM" or "ytd"), scope: "home" | "biz" }
+const detailAttrs = (kind, key, month, scope = "home") => `data-detail="${kind}" data-key="${esc(key)}" data-dmonth="${esc(month)}" data-scope="${scope}" role="button" tabindex="0"`;
+function detailRows(d) {
+  const inPeriod = t => d.month === "ytd" ? t.date >= yearStart : t.date?.startsWith(d.month);
+  if (d.scope === "biz") return S.bizTxns.filter(t => inPeriod(t) && (d.kind === "cat" ? t.category === d.key : (t.payee || t.description || "").trim() === d.key));
+  return S.txns.filter(t => inPeriod(t) && (d.kind === "cat" ? t.category === d.key : (t.payee || t.description || "").trim() === d.key && isSpend(t)));
+}
+function detailHtml() {
+  const d = S.detail; if (!d) return "";
+  const rows = detailRows(d).sort((a, b) => a.date < b.date ? 1 : -1);
+  const out = -rows.reduce((a, t) => a + t.amount, 0), period = d.month === "ytd" ? `${year} so far` : monthName(d.month);
+  const income = d.scope === "biz" ? BIZ_INCOME.includes(d.key) : d.key === "Income";
+  const shown = income ? -out : out;
+  const budget = d.scope === "home" && d.kind === "cat" ? +S.budgets.find(b => b.category === d.key)?.limit || 0 : 0;
+  const merchants = new Map();
+  if (d.kind === "cat") for (const t of rows) { const k = (t.payee || t.description || "Unknown").trim(); const m = merchants.get(k) || { n: 0, v: 0 }; m.n++; m.v -= t.amount; merchants.set(k, m); }
+  const top = [...merchants.entries()].sort((a, b) => Math.abs(b[1].v) - Math.abs(a[1].v)).slice(0, 6);
+  const acct = new Map(S.accounts.map(a => [a.id, a]));
+  const cats = d.scope === "biz" ? BIZ_CATEGORIES : CATEGORIES;
+  const catCell = t => !S.canWrite ? `<span class="pill">${esc(t.category)}</span>`
+    : `<select class="cat-select" ${d.scope === "biz" ? `data-bizcat="${esc(t.id)}"` : `data-txn="${esc(t.id)}"`} aria-label="Category">${cats.map(c => `<option ${c === t.category ? "selected" : ""}>${c}</option>`).join("")}</select>`;
+  const st = budget ? budgetStatus(shown, budget) : null;
+  return `<div class="sheet-backdrop" data-close-detail></div>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head"><div><h2 id="sheetTitle">${esc(d.key)}</h2><p>${esc(period)}${d.scope === "biz" ? " · business" : ""}</p></div><button class="btn" data-close-detail aria-label="Close">Close</button></div>
+    <div class="figures">
+      <div class="fig"><div class="label">${income ? "Received" : "Spent"}</div><div class="value">${usd0.format(shown)}</div><div class="sub">${plural(rows.length, d.kind === "cat" ? "transaction" : "purchase")}</div></div>
+      ${budget ? `<div class="fig"><div class="label">Budget</div><div class="value">${usd0.format(budget)}</div><div class="sub"><span class="status s-${st[0]}" style="margin:0">${budget - shown >= 0 ? `${usd0.format(budget - shown)} left` : `${usd0.format(shown - budget)} over`}</span></div></div>` : ""}
+      ${rows.length ? `<div class="fig"><div class="label">Average</div><div class="value">${usd0.format(shown / rows.length)}</div><div class="sub">per ${d.kind === "cat" ? "transaction" : "purchase"}</div></div>` : ""}
+    </div>
+    ${top.length > 1 ? `<div><h3 class="sheet-sub">Where it went</h3>${top.map(([k, m]) => { const max = Math.abs(top[0][1].v) || 1;
+      return `<div class="hbar"><span class="cat">${esc(k)}</span><div><div class="bar" style="width:${Math.abs(m.v) / max * 100}%"></div></div><span class="amt">${usd0.format(Math.abs(m.v))}</span></div>`; }).join("")}</div>` : ""}
+    <div><h3 class="sheet-sub">Transactions</h3>
+    ${rows.length ? `<div class="scroll"><table><tbody>${rows.slice(0, 200).map(t => { const a = acct.get(t.accountId);
+      return `<tr><td style="white-space:nowrap">${fmtDay(t.date)}</td><td class="payee">${esc(t.payee || t.description)}<small>${esc(a ? `${a.name}${a.last4 ? " ·" + a.last4 : ""}` : "")}${t.pending ? " · pending" : ""}</small></td><td>${catCell(t)}</td><td class="num ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${usd.format(t.amount)}</td></tr>`; }).join("")}</tbody></table></div>` : `<p class="empty">Nothing here for ${esc(period)}.</p>`}
+    ${S.canWrite && rows.length ? `<p class="privacy">Change a category to move a transaction out of ${esc(d.key)}.</p>` : ""}</div>
+  </section>`;
+}
+function openDetail(el) {
+  S.detail = { kind: el.dataset.detail, key: el.dataset.key, month: el.dataset.dmonth, scope: el.dataset.scope || "home" };
+  S.detailReturn = el.id || null; render(true);
+  document.body.style.overflow = "hidden";
+  document.querySelector(".sheet .btn[data-close-detail]")?.focus();
+}
+function closeDetail() { S.detail = null; document.body.style.overflow = ""; render(true); }
+
 /* ---------- render ---------- */
 let pendingRender = false;
 function render(force) {
@@ -1056,7 +1116,7 @@ function render(force) {
   if (!S.db && !S.error) { app.innerHTML = notice + `<div class="empty">Sign in to claude.ai to see the household numbers.</div>`; return; }
   if (!S.ready.accounts || !S.ready.txns) { app.innerHTML = `<div class="empty">Loading your household numbers…</div>`; return; }
   const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, biz: viewBiz, ask: viewAsk }[S.tab] || viewMonth;
-  app.innerHTML = notice + v();
+  app.innerHTML = notice + v() + detailHtml();
 }
 function renderChip() {
   const c = document.getElementById("syncChip"), m = S.meta;
@@ -1098,6 +1158,9 @@ app.addEventListener("click", e => {
     return;
   }
   if (e.target.id === "chatClear") { S.chat = []; render(true); return; }
+  if (e.target.closest("[data-close-detail]")) { closeDetail(); return; }
+  const dt = e.target.closest("[data-detail]");
+  if (dt && !e.target.closest("input,select,button,a,label")) { openDetail(dt); return; }
   const go = e.target.closest("[data-goto]"); if (go) { S.tab = go.dataset.goto; render(true); return; }
   const m = e.target.closest("[data-month]"); if (m && S.tab === "where") { S.whereMonth = m.dataset.month; render(true); return; }
   const sub = e.target.closest("[data-bizsub]");
@@ -1226,7 +1289,9 @@ app.addEventListener("submit", e => {
   if (!name) return;
   write(async db => { await db.collection("bills").add(bill); e.target.reset(); }, "Bill added");
 });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.detail) closeDetail(); });
 app.addEventListener("keydown", e => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("[data-detail]")) { e.preventDefault(); openDetail(e.target); return; }
   if (e.target.id === "askInput" && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(e.target.value); }
 });
 app.addEventListener("focusout", () => setTimeout(() => { if (pendingRender) render(); }, 0));
