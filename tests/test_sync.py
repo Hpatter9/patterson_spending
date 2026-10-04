@@ -66,6 +66,23 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(base, "https://bridge.example/simplefin")
         self.assertEqual(auth, "Basic dXNlcjpwQHNz")  # base64("user:p@ss")
 
+    def test_requests_send_user_agent(self):
+        from unittest import mock
+        from sync import simplefin
+        seen = []
+        class Resp:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self): return b"https://u:p@bridge.example/simplefin"
+        def fake_urlopen(req, timeout):
+            seen.append(req.get_header("User-agent"))
+            return Resp()
+        with mock.patch.object(simplefin.urllib.request, "urlopen", fake_urlopen), \
+             mock.patch.object(simplefin.json, "load", lambda r: {}):
+            simplefin.claim_setup_token("aHR0cHM6Ly9icmlkZ2UuZXhhbXBsZS9jbGFpbS94")
+            simplefin.fetch_accounts("https://u:p@bridge.example/simplefin")
+        self.assertEqual(seen, [simplefin.USER_AGENT] * 2)
+
     def test_missing_credentials(self):
         with self.assertRaises(ValueError):
             _split_credentials("https://bridge.example/simplefin")
