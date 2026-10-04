@@ -31,7 +31,7 @@ Household and business budget tracker for the Patterson family. Several Claude s
 
 **Two sides, picked from the title dropdown** (`SPACES` in `dashboard/index.html`; the choice is remembered per browser):
 - **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Ask.
-- **Get In Tune** (her music therapy practice, getintunemusictherapy.com): Overview, Invoices, Mileage, Taxes, Setup, Ask. It has its own color tokens under `body[data-space="biz"]`. These are provisional purple until her site's brand colors are applied; the site is blocked by this environment's network settings.
+- **Get In Tune** (her music therapy practice, getintunemusictherapy.com): Overview, Invoices, Mileage, Taxes, Setup, Ask. It has its own brand tokens under `body[data-space="biz"]`, taken from her site: indigo #352c73/#4a439e, violet #a12db5, Oswald headings and Assistant text. Her services are the default service lines in `BIZ_DEFAULTS`. Her logo is hosted on static.wixstatic.com, which the network settings block, so the header uses a typed wordmark.
 - Each side keeps its own Ask conversation and suggestions.
 - Budget rows, category bars and merchants open a detail panel.
 - Ask is a Claude companion. It runs on the viewer's own account through the page's ability to call Claude. It can propose changes, which save only when the viewer taps Apply.

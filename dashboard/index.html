@@ -1,7 +1,7 @@
 <title>Patterson Spending</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&family=Oswald:wght@500;600&family=Assistant:wght@400;600;700&display=swap">
 <style>
 /* Layout: household ledger. Sticky header + tab rail, summary figures first, detail below in one column that widens to two on desktop. */
 :root {
@@ -36,10 +36,16 @@
   --line: #29332e; --accent: #5cc29e; --accent-soft: #1d3a30; --bar-rest: #2f6553;
   --good: #4cbf5a; --warn: #f0b429; --warn-fill: #f0b429; --crit: #ec6a66; --s-in: #3fa982; --s-out: #8f86e6; color-scheme: dark;
 }
-/* Get In Tune side: its own palette, same structure. Provisional until her site's brand colors are applied. */
-body[data-space="biz"] { --bg: #f6f3f8; --accent: #6b3fa0; --accent-soft: #ece3f6; --bar-rest: #c9b6e2; --line: #e3dceb; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body[data-space="biz"] { --bg: #131017; --surface: #1b1721; --accent: #b99be3; --accent-soft: #2d2340; --bar-rest: #5b4783; --line: #2f2839; } }
-:root[data-theme="dark"] body[data-space="biz"] { --bg: #131017; --surface: #1b1721; --accent: #b99be3; --accent-soft: #2d2340; --bar-rest: #5b4783; --line: #2f2839; }
+/* Get In Tune side: her brand from getintunemusictherapy.com. Deep indigo #352c73 / #4a439e, periwinkle #6a6db0,
+   violet #a12db5, lavender ground #f7f6fb; Oswald headings and Assistant text, as on her site. */
+body[data-space="biz"] { --bg: #f7f6fb; --ink: #1d1838; --accent: #4a439e; --accent-soft: #e9e8f6; --bar-rest: #b4b6dd; --line: #e2e0ef;
+  --s-in: #4a439e; --s-out: #a12db5; --font-display: "Oswald", "Arial Narrow", "Avenir Next Condensed", sans-serif; --font-body: "Assistant", "Segoe UI", system-ui, sans-serif; }
+body[data-space="biz"] .space-pick #spaceName { text-transform: uppercase; letter-spacing: .04em; font-weight: 600; color: #352c73; }
+body[data-space="biz"] .top { border-bottom: 2px solid transparent; border-image: linear-gradient(90deg, var(--accent), var(--s-out)) 1; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body[data-space="biz"] { --bg: #110f20; --surface: #1a172e; --ink: #ecebf8; --accent: #a9abe8; --accent-soft: #28244a; --bar-rest: #4b4d8c; --line: #2c2849; --s-in: #a9abe8; --s-out: #d27ee0; }
+  :root:not([data-theme="light"]) body[data-space="biz"] .space-pick #spaceName { color: #d9d8f5; } }
+:root[data-theme="dark"] body[data-space="biz"] { --bg: #110f20; --surface: #1a172e; --ink: #ecebf8; --accent: #a9abe8; --accent-soft: #28244a; --bar-rest: #4b4d8c; --line: #2c2849; --s-in: #a9abe8; --s-out: #d27ee0; }
+:root[data-theme="dark"] body[data-space="biz"] .space-pick #spaceName { color: #d9d8f5; }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); font-variant-numeric: tabular-nums; }
 h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
@@ -53,7 +59,7 @@ button, input, select { font: inherit; color: inherit; }
 .brand { display: flex; align-items: baseline; gap: 10px; flex: 1 1 auto; min-width: 0; }
 .brand h1 { font-size: 1.45rem; }
 .brand { flex-wrap: wrap; row-gap: 0; }
-.brand span#monthLabel { white-space: nowrap; }
+.brand #monthLabel { white-space: normal; }
 .space-pick { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: 8px; }
 .space-pick::after { content: ""; width: 7px; height: 7px; border-right: 2.5px solid var(--accent); border-bottom: 2.5px solid var(--accent); transform: translateY(-3px) rotate(45deg); }
 .space-pick:hover, .space-pick:focus-within { background: var(--accent-soft); }
@@ -224,7 +230,7 @@ const NOT_SPENDING = new Set(["Income","Transfer"]);
 // txns = household only; allTxns = every account (last 7 months); bizTxns = business accounts since January 1.
 const SPACES = {
   home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["ask", "Ask"]] },
-  biz: { title: "Get In Tune", sub: "Music therapy practice", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["ask", "Ask"]] },
+  biz: { title: "Get In Tune", sub: "Therapy & coaching for life's big changes", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["ask", "Ask"]] },
 };
 const S = { space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
   invoices: [], mileage: [], taxPayments: [], bizMeta: null, bizSub: "overview", bizSearch: "", bizTodo: false,
@@ -557,12 +563,14 @@ function viewBills() {
 }
 
 /* ---------- business ---------- */
-const BIZ_INCOME = ["Contract Income","Private Pay","Groups & Workshops","Other Income"];
+const BIZ_INCOME = ["Contract Income","Private Pay","Groups & Workshops","Training & Supervision","Program Sales","Other Income"];
 const BIZ_EXPENSE = ["Instruments & Equipment","Music & Licensing","Therapy Supplies","Continuing Education","Certification & Licensing","Memberships","Liability Insurance","Software & Apps","Marketing & Website","Rent & Space","Contractors","Phone & Internet","Travel & Meals","Bank & Payment Fees","Office Supplies","Other Expense"];
 const BIZ_CATEGORIES = [...BIZ_INCOME, ...BIZ_EXPENSE, "Owner Draw", "Owner Contribution", "Tax Payment", "Transfer", "Uncategorized"];
 const SHARED = "Shared";
-const BIZ_DEFAULTS = { serviceLines: ["Music Therapy"], defaultLine: "Music Therapy", mileageRate: 0.70, incomeTaxRate: 12 };
-const INVOICE_KINDS = { contract: "Facility contract", private: "Private pay", group: "Group / workshop" };
+// Get In Tune's services, grouped from getintunemusictherapy.com. Editable in Setup.
+const BIZ_DEFAULTS = { serviceLines: ["1:1 Therapy & Coaching", "Group Therapy", "Workshops & Summits", "DIY Music Therapy", "Therapist Training & Supervision", "Treatment Center Contracts"],
+  defaultLine: "1:1 Therapy & Coaching", mileageRate: 0.70, incomeTaxRate: 12 };
+const INVOICE_KINDS = { private: "Individual client", contract: "Treatment center / facility", group: "Group, workshop or summit", training: "Training / supervision" };
 const year = today.getFullYear(), yearStart = `${year}-01-01`;
 const todayKey = `${year}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 // IRS estimated-tax periods and due dates (a due date on a weekend moves to the next business day).
@@ -741,7 +749,7 @@ function viewInvoices() {
   <div class="cols">
     <section class="panel">
       <div class="panel-head"><h2>Open invoices</h2><p>Soonest due first</p></div>
-      ${open.length ? `<div class="scroll"><table><thead><tr><th>Client</th><th>Sent</th><th>Due</th><th class="num">Amount</th><th></th></tr></thead><tbody>${open.map(i => row(i, true)).join("")}</tbody></table></div>` : `<p class="empty">No open invoices. Add one below when you bill a facility or family.</p>`}
+      ${open.length ? `<div class="scroll"><table><thead><tr><th>Client</th><th>Sent</th><th>Due</th><th class="num">Amount</th><th></th></tr></thead><tbody>${open.map(i => row(i, true)).join("")}</tbody></table></div>` : `<p class="empty">No open invoices. Add one below when you bill a client, a treatment center or a training.</p>`}
     </section>
     <section class="panel">
       <div class="panel-head"><h2>How late</h2><p>Open invoices by days past due</p></div>
@@ -906,7 +914,7 @@ function financeSnapshot() {
 }
 function businessSnapshot() {
   const b = biz(), ytd = pnl(yearStart, todayKey), tax = taxOn(ytd.net), qs = taxQuarters();
-  const out = [`BUSINESS: her music therapy practice (services: ${b.serviceLines.join(", ")}). Separate accounts, cash basis, ${year} so far.`];
+  const out = [`BUSINESS: Get In Tune Inc., Marlys Woods's practice (MS, LMFT, MT-BC; founded 2013): therapy and coaching for life's big changes, using music therapy. Services: ${b.serviceLines.join(", ")}. Separate accounts, cash basis, ${year} so far.`];
   if (!bizIds().length) out.push("(No business accounts marked yet, so bank income and expenses are missing.)");
   out.push(`Income ${usd0.format(ytd.income)}, expenses ${usd0.format(ytd.expense)}, mileage deduction ${usd0.format(ytd.mileage)}, profit ${usd0.format(ytd.net)}.`);
   if (ytd.todoN) out.push(`${ytd.todoN} business transactions (net ${usd0.format(ytd.todo)}) have no category and are left out.`);
@@ -1066,7 +1074,7 @@ async function ask(question) {
   render(true); scrollThread();
   const history = S.chat.slice(0, -1).filter(m => m.content).slice(-12);
   while (history.length && history[0].role !== "user") history.shift();
-  const focus = S.space === "biz" ? "\n\nThe person is on the Get In Tune side of the dashboard (her music therapy practice). Answer from the BUSINESS section unless they ask about the household.\n\n" : "\n\nThe person is on the personal (household) side of the dashboard.\n\n";
+  const focus = S.space === "biz" ? "\n\nThe person is on the Get In Tune side of the dashboard (Marlys's practice). Answer from the BUSINESS section unless they ask about the household.\n\n" : "\n\nThe person is on the personal (household) side of the dashboard.\n\n";
   const input = [{ role: "user", content: COMPANION_RULES + financeSnapshot() + focus }, ...history];
   const bubble = () => document.querySelector("#thread .msg.assistant:last-child");
   const opts = { signal: S.asking.signal, onText: ({ text }) => { reply.content = text; const b = bubble(); if (b) b.innerHTML = md(text); scrollThread(); } };
