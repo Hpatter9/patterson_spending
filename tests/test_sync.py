@@ -4,17 +4,22 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sync.categorize import load_rules
+from sync.categorize import BUSINESS_RULES, load_rules
 from sync.main import main
 from sync.normalize import account_type, normalize
 from sync.simplefin import _split_credentials
 
 FIXTURE = Path(__file__).parent / "fixtures" / "simplefin_sample.json"
+BIZ_FIXTURE = Path(__file__).parent / "fixtures" / "simplefin_business_sample.json"
 NOW = datetime(2025, 10, 3, 12, 0, tzinfo=timezone.utc)
 
 
 def run(overrides=None):
     return normalize(json.loads(FIXTURE.read_text()), load_rules(overrides=overrides), now=NOW)
+
+
+def run_raw(path):
+    return normalize(json.loads(Path(path).read_text()), load_rules(), now=NOW)
 
 
 class NormalizeTest(unittest.TestCase):
@@ -92,6 +97,43 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(account_type("Joint Account", "savings"), "savings")
 
 
+class BusinessTest(unittest.TestCase):
+    def run_biz(self, business_accounts=("ACT-biz-1",), overrides=None):
+        result = normalize(json.loads(BIZ_FIXTURE.read_text()), load_rules(), now=NOW,
+                           business_rules=load_rules(BUSINESS_RULES, overrides), business_accounts=business_accounts)
+        accts = {a["id"]: a["last4"] for a in result["accounts"]}
+        return {(accts[t["accountId"]], t["description"]): t["category"] for t in result["transactions"]}
+
+    def test_business_categories(self):
+        cats = self.run_biz()
+        self.assertEqual(cats[("4444", "SPOTIFY USA")], "Music & Licensing")
+        self.assertEqual(cats[("4444", "SWEETWATER SOUND")], "Instruments & Equipment")
+        self.assertEqual(cats[("4444", "IRS USATAXPYMT")], "Tax Payment")
+        self.assertEqual(cats[("4444", "SQUARESPACE")], "Marketing & Website")  # longer merchant beats SQUARE income
+        self.assertEqual(cats[("4444", "SQUARE INC DEPOSIT")], "Private Pay")
+        self.assertEqual(cats[("4444", "SQUARE INC FEE ADJ")], "Uncategorized")  # income keywords only match deposits
+        self.assertEqual(cats[("4444", "MOBILE DEPOSIT")], "Uncategorized")
+
+    def test_owner_transfers(self):
+        cats = self.run_biz()
+        self.assertEqual(cats[("4444", "ONLINE TRANSFER TO CHK 1111")], "Owner Draw")
+        self.assertEqual(cats[("1111", "ONLINE TRANSFER FROM BUSINESS CHK 4444")], "Transfer")
+
+    def test_household_untouched(self):
+        cats = self.run_biz()
+        self.assertEqual(cats[("1111", "SPOTIFY USA")], "Subscriptions")
+        self.assertEqual(cats[("1111", "KROGER #123 SPRINGFIELD")], "Groceries")
+
+    def test_dashboard_id_and_business_overrides(self):
+        biz_id = next(a["id"] for a in run_raw(BIZ_FIXTURE)["accounts"] if a["last4"] == "4444")
+        cats = self.run_biz(business_accounts=[biz_id], overrides={"mobile deposit": "Contract Income"})
+        self.assertEqual(cats[("4444", "MOBILE DEPOSIT")], "Contract Income")
+
+    def test_no_business_accounts_means_household_rules(self):
+        cats = self.run_biz(business_accounts=())
+        self.assertEqual(cats[("4444", "SPOTIFY USA")], "Subscriptions")
+
+
 class ClientTest(unittest.TestCase):
     def test_credentials_split_from_url(self):
         base, auth = _split_credentials("https://user:p%40ss@bridge.example/simplefin/")
@@ -128,6 +170,14 @@ class MainTest(unittest.TestCase):
             data = json.loads(out.read_text())
             self.assertEqual(len(data["accounts"]), 3)
             self.assertEqual(len(data["transactions"]), 7)
+
+    def test_business_accounts_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out, ids = Path(tmp) / "sync.json", Path(tmp) / "business_accounts.json"
+            ids.write_text(json.dumps(["ACT-biz-1"]))
+            self.assertEqual(main(["--fixture", str(BIZ_FIXTURE), "--out", str(out), "--business-accounts", str(ids)]), 0)
+            cats = {t["description"]: t["category"] for t in json.loads(out.read_text())["transactions"]}
+            self.assertEqual(cats["SWEETWATER SOUND"], "Instruments & Equipment")
 
 
 if __name__ == "__main__":

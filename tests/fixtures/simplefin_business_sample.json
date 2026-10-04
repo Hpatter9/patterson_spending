@@ -1,0 +1,36 @@
+{
+  "errors": [],
+  "accounts": [
+    {
+      "org": {"domain": "examplebank.test", "name": "Example Bank"},
+      "id": "ACT-checking-1",
+      "name": "Everyday Checking (...1111)",
+      "currency": "USD",
+      "balance": "2450.18",
+      "balance-date": 1759449600,
+      "transactions": [
+        {"id": "TX-1", "posted": 1759363200, "amount": "-84.12", "description": "KROGER #123 SPRINGFIELD"},
+        {"id": "TX-2", "posted": 1759276800, "amount": "-12.99", "description": "SPOTIFY USA"},
+        {"id": "TX-3", "posted": 1759190400, "amount": "500.00", "description": "ONLINE TRANSFER FROM BUSINESS CHK 4444"}
+      ]
+    },
+    {
+      "org": {"domain": "examplebank.test", "name": "Example Bank"},
+      "id": "ACT-biz-1",
+      "name": "Business Checking (...4444)",
+      "currency": "USD",
+      "balance": "6210.40",
+      "balance-date": 1759449600,
+      "transactions": [
+        {"id": "BX-1", "posted": 1759363200, "amount": "-12.99", "description": "SPOTIFY USA"},
+        {"id": "BX-2", "posted": 1759276800, "amount": "-500.00", "description": "ONLINE TRANSFER TO CHK 1111"},
+        {"id": "BX-3", "posted": 1759276800, "amount": "412.50", "description": "SQUARE INC DEPOSIT"},
+        {"id": "BX-4", "posted": 1759190400, "amount": "-15.00", "description": "SQUARE INC FEE ADJ"},
+        {"id": "BX-5", "posted": 1759190400, "amount": "-89.00", "description": "SWEETWATER SOUND"},
+        {"id": "BX-6", "posted": 1759104000, "amount": "-1200.00", "description": "IRS USATAXPYMT"},
+        {"id": "BX-7", "posted": 1759104000, "amount": "1800.00", "description": "MOBILE DEPOSIT"},
+        {"id": "BX-8", "posted": 1759104000, "amount": "-75.00", "description": "SQUARESPACE"}
+      ]
+    }
+  ]
+}
