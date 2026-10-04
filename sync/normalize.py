@@ -61,8 +61,10 @@ def _iso_date(ts):
     return datetime.fromtimestamp(int(ts), tz=timezone.utc).date().isoformat()
 
 
-def normalize(raw, rules, now=None):
+def normalize(raw, rules, now=None, business_rules=None, business_accounts=()):
+    """business_accounts: dashboard (a_...) or SimpleFIN ids whose transactions use business_rules."""
     now = now or datetime.now(timezone.utc)
+    business_accounts = set(business_accounts)
     type_overrides = rules.get("account_types", {})
     accounts, transactions = [], []
 
@@ -76,6 +78,9 @@ def normalize(raw, rules, now=None):
                             institution, descriptions)
         if kind == HIDDEN:  # duplicates, $0 policies and other accounts not worth tracking
             continue
+        acct_rules = rules
+        if business_rules and (acct_id in business_accounts or acct["id"] in business_accounts):
+            acct_rules = business_rules
         balance = float(acct.get("balance") or 0)
         # Banks report card/loan balances with either sign; store liabilities as negative.
         if kind in LIABILITY_TYPES:
@@ -104,7 +109,7 @@ def normalize(raw, rules, now=None):
                 "amount": round(amount, 2),
                 "payee": payee,
                 "description": (txn.get("description") or "").strip(),
-                "category": categorize(f"{payee} {txn.get('description', '')}", amount, rules),
+                "category": categorize(f"{payee} {txn.get('description', '')}", amount, acct_rules),
                 "pending": bool(txn.get("pending")),
             })
 

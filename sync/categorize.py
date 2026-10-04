@@ -3,10 +3,13 @@ import json
 from pathlib import Path
 
 DEFAULT_RULES = Path(__file__).with_name("rules.json")
+BUSINESS_RULES = Path(__file__).with_name("business_rules.json")
 
 UNCATEGORIZED = "Uncategorized"
 TRANSFER = "Transfer"
 INCOME = "Income"
+OWNER_DRAW = "Owner Draw"
+OWNER_CONTRIBUTION = "Owner Contribution"
 
 
 def load_rules(path=DEFAULT_RULES, overrides=None):
@@ -17,6 +20,7 @@ def load_rules(path=DEFAULT_RULES, overrides=None):
     rules["merchants"] = merchants
     rules["transfer_keywords"] = [k.upper() for k in rules.get("transfer_keywords", [])]
     rules["income_keywords"] = [k.upper() for k in rules.get("income_keywords", [])]
+    rules["owner_keywords"] = [k.upper() for k in rules.get("owner_keywords", [])]
     return rules
 
 
@@ -26,8 +30,11 @@ def categorize(payee, amount, rules):
     for keyword in sorted(rules["merchants"], key=len, reverse=True):
         if keyword in text:
             return rules["merchants"][keyword]
+    # Business rules only: money moving to or from household accounts.
+    if any(k in text for k in rules["owner_keywords"]):
+        return OWNER_CONTRIBUTION if amount > 0 else OWNER_DRAW
     if any(k in text for k in rules["transfer_keywords"]):
         return TRANSFER
     if amount > 0 and any(k in text for k in rules["income_keywords"]):
-        return INCOME
+        return rules.get("income_category", INCOME)
     return UNCATEGORIZED
