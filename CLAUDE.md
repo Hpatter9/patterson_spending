@@ -36,5 +36,5 @@ Household and business budget tracker for the Patterson family. Several Claude s
 - **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Ask.
 - **Get In Tune** (her music therapy practice, getintunemusictherapy.com): Overview, Invoices, Mileage, Taxes, Setup, Ask. It has its own brand tokens under `body[data-space="biz"]`, taken from her site: indigo #352c73/#4a439e, violet #a12db5, Oswald headings and Assistant text. Her services are the default service lines in `BIZ_DEFAULTS`. Her logo (from static.wixstatic.com, trimmed to 314×112) is embedded in the header as a WebP data URI (`#bizLogo`), on a light background in dark mode.
 - Each side keeps its own Ask conversation and suggestions.
-- Budget rows, category bars and merchants open a detail panel.
+- Budget rows, category bars and merchants open a detail panel. It shows an exact charges − refunds = total breakdown and a pending note (`catMath`), and budget rows carry a short pending/refunds line.
 - Ask is a Claude companion. It runs on the viewer's own account through the page's ability to call Claude. It can propose changes, which save only when the viewer taps Apply.

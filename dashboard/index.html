@@ -207,6 +207,14 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 .sheet .fig { padding: 10px 12px; }
 .sheet .fig .value { font-size: 1.3rem; }
 .sheet .fig .label { font-size: .68rem; }
+.row-note { grid-column: 1 / -1; font-size: .78rem; color: var(--muted); }
+.breakdown { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: .92rem; }
+.breakdown > div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.breakdown small { color: var(--muted); margin-left: 6px; }
+.breakdown .total { border-top: 1px solid var(--line); padding-top: 6px; font-weight: 600; }
+.breakdown .pending-note { margin: 4px 0 0; font-size: .8rem; color: var(--ink-2); }
+.pill.pending { background: color-mix(in srgb, var(--warn-fill) 22%, var(--surface)); color: var(--warn); }
+.pill.refund { background: color-mix(in srgb, var(--good) 16%, var(--surface)); color: var(--good); }
 .sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .sheet-head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
 .sheet-sub { font-size: .8rem; font-family: var(--font-body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
@@ -288,6 +296,15 @@ async function write(fn, okMsg) {
 /* ---------- derived numbers ---------- */
 const merchantKey = txn => String(txn?.payee || txn?.description || "").toUpperCase().replace(/[#*]\S*|\d+/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 3).join(" ");
 const isSpend = t => !NOT_SPENDING.has(t.category);
+// Charges, refunds and pending for one category in a set of rows (amounts negative = money out).
+function catMath(rows) {
+  const m = { charges: 0, nCharges: 0, refunds: 0, nRefunds: 0, pending: 0, nPending: 0 };
+  for (const t of rows) {
+    if (t.amount < 0) { m.charges -= t.amount; m.nCharges++; } else if (t.amount > 0) { m.refunds += t.amount; m.nRefunds++; }
+    if (t.pending) { m.pending += Math.abs(t.amount); m.nPending++; }
+  }
+  return m;
+}
 function spendByCat(month) {
   const m = new Map();
   for (const t of S.txns) if (t.date?.startsWith(month) && isSpend(t)) m.set(t.category, (m.get(t.category) || 0) - t.amount);
@@ -381,10 +398,13 @@ function viewMonth() {
   const rows = cats.map(c => {
     const sp = spent.get(c) || 0, lim = +budgets.get(c)?.limit || 0, st = budgetStatus(sp, lim);
     const w = lim ? Math.min(100, (sp / lim) * 100) : 0;
+    const cm = catMath(S.txns.filter(t => t.date?.startsWith(thisMonth) && t.category === c));
+    const note = [cm.nPending ? `Includes ${usd0.format(cm.pending)} pending` : "", cm.nRefunds ? `${usd0.format(cm.refunds)} in refunds taken off` : ""].filter(Boolean).join(" · ");
     return `<div class="budget-row clickable" ${detailAttrs("cat", c, thisMonth)}>
       <div class="name">${esc(c)}${st ? `<span class="status s-${st[0]}">${st[1]}</span>` : `<span class="status" style="color:var(--muted)">No budget</span>`}</div>
       <div class="nums">${usd0.format(sp)} of ${S.canWrite ? `<input class="limit-input" type="number" min="0" step="10" inputmode="decimal" id="lim-${slug(c)}" data-cat="${esc(c)}" value="${lim || ""}" placeholder="set" aria-label="Monthly budget for ${esc(c)}">` : usd0.format(lim)}</div>
       <div class="track">${lim ? `<b class="fill-${st[0]}" style="width:${w}%"></b><span class="pace" style="left:${pace * 100}%" title="Where you'd be at an even pace"></span>` : ""}</div>
+      ${note ? `<div class="row-note">${note}</div>` : ""}
     </div>`;
   }).join("");
 
@@ -1186,15 +1206,24 @@ function detailHtml() {
   <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <div class="sheet-head"><div><h2 id="sheetTitle">${esc(d.key)}</h2><p>${esc(period)}${d.scope === "biz" ? " · business" : ""}</p></div><button class="btn" data-close-detail aria-label="Close">Close</button></div>
     <div class="figures">
-      <div class="fig"><div class="label">${income ? "Received" : "Spent"}</div><div class="value">${usd0.format(shown)}</div><div class="sub">${plural(rows.length, d.kind === "cat" ? "transaction" : "purchase")}</div></div>
+      <div class="fig"><div class="label">${income ? "Received" : "Spent"}</div><div class="value">${usd.format(shown)}</div><div class="sub">${plural(rows.length, d.kind === "cat" ? "transaction" : "purchase")}</div></div>
       ${budget ? `<div class="fig"><div class="label">Budget</div><div class="value">${usd0.format(budget)}</div><div class="sub"><span class="status s-${st[0]}" style="margin:0">${budget - shown >= 0 ? `${usd0.format(budget - shown)} left` : `${usd0.format(shown - budget)} over`}</span></div></div>` : ""}
       ${rows.length ? `<div class="fig"><div class="label">Average</div><div class="value">${usd0.format(shown / rows.length)}</div><div class="sub">per ${d.kind === "cat" ? "transaction" : "purchase"}</div></div>` : ""}
     </div>
+    ${rows.length ? (() => { const cm = catMath(rows), out1 = income ? cm.refunds : cm.charges, back = income ? cm.charges : cm.refunds;
+      const n1 = income ? cm.nRefunds : cm.nCharges, n2 = income ? cm.nCharges : cm.nRefunds;
+      return `<div class="breakdown" aria-label="How the total adds up">
+        <div><span>${income ? "Deposits" : "Charges"} <small>${plural(n1, income ? "deposit" : "charge")}</small></span><b>${usd.format(out1)}</b></div>
+        ${n2 ? `<div><span>${income ? "Reversals" : "Refunds and credits"} <small>${plural(n2, income ? "reversal" : "refund")}</small></span><b class="${income ? "neg" : "pos"}">− ${usd.format(back)}</b></div>` : ""}
+        <div class="total"><span>${income ? "Received" : "Spent"}</span><b>${usd.format(shown)}</b></div>
+        ${cm.nPending ? `<p class="pending-note"><span class="pill pending">Pending</span> Includes ${usd.format(cm.pending)} from ${plural(cm.nPending, "pending charge")}. Pending amounts can change when they post (restaurant tips, hotel and gas holds). They update on the next morning's sync.</p>` : ""}
+        <p class="pending-note" style="color:var(--muted)">Totals elsewhere are rounded to whole dollars. These are exact.</p>
+      </div>`; })() : ""}
     ${top.length > 1 ? `<div><h3 class="sheet-sub">Where it went</h3>${top.map(([k, m]) => { const max = Math.abs(top[0][1].v) || 1;
       return `<div class="hbar"><span class="cat">${esc(k)}</span><div><div class="bar" style="width:${Math.abs(m.v) / max * 100}%"></div></div><span class="amt">${usd0.format(Math.abs(m.v))}</span></div>`; }).join("")}</div>` : ""}
     <div><h3 class="sheet-sub">Transactions</h3>
     ${rows.length ? `<div class="scroll"><table><tbody>${rows.slice(0, 200).map(t => { const a = acct.get(t.accountId);
-      return `<tr><td style="white-space:nowrap">${fmtDay(t.date)}</td><td class="payee">${esc(t.payee || t.description)}<small>${esc(a ? `${a.name}${a.last4 ? " ·" + a.last4 : ""}` : "")}${t.pending ? " · pending" : ""}</small></td><td>${catCell(t)}</td><td class="num ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${usd.format(t.amount)}</td></tr>`; }).join("")}</tbody></table></div>` : `<p class="empty">Nothing here for ${esc(period)}.</p>`}
+      return `<tr><td style="white-space:nowrap">${fmtDay(t.date)}</td><td class="payee">${esc(t.payee || t.description)}<small>${esc(a ? `${a.name}${a.last4 ? " ·" + a.last4 : ""}` : "")}</small>${t.pending ? ` <span class="pill pending">Pending</span>` : ""}${t.amount > 0 && !income ? ` <span class="pill refund">Refund</span>` : ""}</td><td>${catCell(t)}</td><td class="num ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${usd.format(t.amount)}</td></tr>`; }).join("")}</tbody></table></div>` : `<p class="empty">Nothing here for ${esc(period)}.</p>`}
     ${S.canWrite && rows.length ? `<p class="privacy">Change a category to move a transaction out of ${esc(d.key)}.</p>` : ""}</div>
   </section>`;
 }
