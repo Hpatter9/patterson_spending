@@ -155,6 +155,10 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 .composer { display: flex; gap: 8px; align-items: flex-end; }
 .composer textarea { flex: 1 1 auto; min-width: 0; resize: vertical; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 8px 10px; font: inherit; }
 @media (max-width: 520px) { .msg { max-width: 100%; } }
+.add-acct { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+.add-acct summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.add-acct[open] { display: grid; gap: 8px; }
+.add-acct .meta { margin: 0; color: var(--muted); font-size: .85rem; }
 .empty { color: var(--muted); padding: 24px 8px; text-align: center; }
 .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--ink); color: var(--bg); padding: 6px 10px; border-radius: 8px; font-size: .8rem; max-width: 240px; }
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: .85rem; z-index: 30; }
@@ -395,6 +399,26 @@ function acctEdit(a, field, label, suffix = "") {
   const v = a[field] ?? "";
   return S.canWrite ? `<label>${label} <input type="number" step="any" min="0" inputmode="decimal" id="${field}-${esc(a.id)}" data-acct="${esc(a.id)}" data-field="${field}" value="${esc(v)}">${suffix}</label>` : (v !== "" ? `<span>${label} ${esc(v)}${suffix}</span>` : "");
 }
+const LIAB_TYPES = new Set(["loan", "credit"]);
+function manualRow(a) {
+  if (!a.manual) return "";
+  const updated = a.updatedAt ? new Date(a.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+  if (!S.canWrite) return `<div class="edit"><span>Added by hand${updated ? ` · updated ${updated}` : ""}</span></div>`;
+  return `<div class="edit"><label>${LIAB_TYPES.has(a.type) ? "Owed $" : "Balance $"} <input type="number" step="0.01" min="0" inputmode="decimal" id="mbal-${esc(a.id)}" data-manual-bal="${esc(a.id)}" value="${Math.abs(+a.balance || 0)}"></label><span>${updated ? `Updated ${updated}` : ""}</span><button class="btn link" data-del-acct="${esc(a.id)}" aria-label="Remove ${esc(a.name)}">Remove</button></div>`;
+}
+function addAccountForm() {
+  if (!S.canWrite) return "";
+  return `<details class="add-acct"><summary>Add an account by hand</summary>
+    <p class="meta">For loans or accounts your bank sync can't reach. Update the balance here when you get a statement. The daily sync won't touch it.</p>
+    <form class="add" id="acctForm">
+      <label>Name<input id="acctName" required maxlength="60" placeholder="Student loan"></label>
+      <label>Type<select id="acctType"><option value="loan">Loan</option><option value="credit">Credit card</option><option value="savings">Savings</option><option value="checking">Checking</option><option value="investment">Investment</option></select></label>
+      <label>Balance or amount owed<input id="acctBal" type="number" min="0" step="0.01" required placeholder="18250.00"></label>
+      <label>APR %<input id="acctApr" type="number" min="0" step="0.01" placeholder="5.5"></label>
+      <label>Monthly payment<input id="acctPay" type="number" min="0" step="0.01" placeholder="250"></label>
+      <button class="btn primary" type="submit">Add account</button>
+    </form></details>`;
+}
 function viewWorth() {
   const byDebt = (a, b) => a.balance - b.balance;
   const assets = S.accounts.filter(isAsset), invest = S.accounts.filter(a => a.type === "investment");
@@ -407,11 +431,11 @@ function viewWorth() {
   const head = (a, extra = "") => `<div><div class="payee">${esc(a.name)}</div><div class="meta">${esc(a.institution)}${a.last4 ? ` · ${esc(a.last4)}` : ""}${extra}</div></div><div class="bal">${usd.format(a.balance)}</div>`;
   const utilBar = r => `<div class="util"><b class="fill-${r > 0.5 ? "crit" : r > 0.3 ? "warn" : "good"}" style="width:${Math.min(100, r * 100)}%"></b></div>`;
   const cardHtml = cards.map(c => { const r = c.limit ? -c.balance / c.limit : null;
-    return `<div class="acct">${head(c, r != null ? ` · ${Math.round(r * 100)}% used` : "")}${r != null ? utilBar(r) : ""}<div class="edit">${acctEdit(c, "limit", "Limit $")}${acctEdit(c, "apr", "APR", "%")}</div></div>`; }).join("");
+    return `<div class="acct">${head(c, r != null ? ` · ${Math.round(r * 100)}% used` : "")}${r != null ? utilBar(r) : ""}<div class="edit">${acctEdit(c, "limit", "Limit $")}${acctEdit(c, "apr", "APR", "%")}</div>${manualRow(c)}</div>`; }).join("");
   const loanHtml = loans.map(l => { const p = payoff(l.balance, l.apr, l.payment);
     const txt = !p ? "Add APR and monthly payment to see a payoff date" : p.never ? "Payment doesn't cover interest" :
       `Paid off ${new Date(today.getFullYear(), today.getMonth() + p.months, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · ${usd0.format(p.interest)} interest left`;
-    return `<div class="acct">${head(l)}<div class="edit">${acctEdit(l, "apr", "APR", "%")}${acctEdit(l, "payment", "Payment $")}<span>${txt}</span></div></div>`; }).join("");
+    return `<div class="acct">${head(l)}<div class="edit">${acctEdit(l, "apr", "APR", "%")}${acctEdit(l, "payment", "Payment $")}<span>${txt}</span></div>${manualRow(l)}</div>`; }).join("");
   const group = (title, html, list) => list.length ? `<div class="acct-group"><h3>${title} · ${usd0.format(sum(list))}</h3>${html}</div>` : "";
   return `
   <div class="figures">
@@ -423,7 +447,8 @@ function viewWorth() {
   <div class="cols">
     <section class="panel">
       <div class="panel-head"><h2>Accounts</h2><p>Debts shown as negative balances</p></div>
-      ${S.accounts.length ? group("Cash", assets.map(a => `<div class="acct">${head(a, ` · ${a.type}`)}</div>`).join(""), assets) + group("Investments", invest.map(a => `<div class="acct">${head(a)}</div>`).join(""), invest) + group("Credit cards", cardHtml, cards) + group("Loans", loanHtml, loans) : `<p class="empty">No accounts yet. They appear after the first bank sync.</p>`}
+      ${addAccountForm()}
+      ${S.accounts.length ? group("Cash", assets.map(a => `<div class="acct">${head(a, ` · ${a.type}`)}${manualRow(a)}</div>`).join(""), assets) + group("Investments", invest.map(a => `<div class="acct">${head(a)}${manualRow(a)}</div>`).join(""), invest) + group("Credit cards", cardHtml, cards) + group("Loans", loanHtml, loans) : `<p class="empty">No accounts yet. They appear after the first bank sync.</p>`}
     </section>
     <section class="panel">
       <div class="panel-head"><h2>Net worth over time</h2><p>One point per daily sync</p></div>
@@ -630,6 +655,12 @@ app.addEventListener("click", e => {
   if (e.target.id === "chatClear") { S.chat = []; render(true); return; }
   const go = e.target.closest("[data-goto]"); if (go) { S.tab = go.dataset.goto; render(true); return; }
   const m = e.target.closest("[data-month]"); if (m && S.tab === "where") { S.whereMonth = m.dataset.month; render(true); return; }
+  const delA = e.target.closest("[data-del-acct]");
+  if (delA) {
+    if (delA.dataset.confirm) write(db => db.doc(`accounts/${delA.dataset.delAcct}`).delete(), "Account removed");
+    else { delA.dataset.confirm = "1"; delA.textContent = "Confirm remove"; delA.style.color = "var(--crit)"; }
+    return;
+  }
   const del = e.target.closest("[data-del]");
   if (del) {
     if (del.dataset.confirm) write(db => db.doc(`bills/${del.dataset.del}`).delete(), "Bill removed");
@@ -659,10 +690,26 @@ app.addEventListener("change", e => {
     const v = t.value === "" ? null : parseFloat(t.value);
     write(db => db.doc(`accounts/${t.dataset.acct}`).update({ [t.dataset.field]: v }), "Saved");
   }
+  if (t.dataset.manualBal) {
+    const a = S.accounts.find(x => x.id === t.dataset.manualBal), v = Math.abs(parseFloat(t.value));
+    if (!a || isNaN(v)) return;
+    write(db => db.doc(`accounts/${a.id}`).update({ balance: LIAB_TYPES.has(a.type) ? -v : v, updatedAt: new Date().toISOString(), balanceDate: new Date().toISOString().slice(0, 10) }), "Balance updated");
+  }
   if (t.dataset.paid) write(db => db.doc(`bills/${t.dataset.paid}`).update({ paidMonth: t.checked ? thisMonth : null }), t.checked ? "Marked paid" : "Marked unpaid");
 });
 app.addEventListener("submit", e => {
   if (e.target.id === "askForm") { e.preventDefault(); ask(document.getElementById("askInput").value); return; }
+  if (e.target.id === "acctForm") {
+    e.preventDefault();
+    const name = document.getElementById("acctName").value.trim(), type = document.getElementById("acctType").value;
+    const bal = Math.abs(parseFloat(document.getElementById("acctBal").value)), num = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
+    if (!name || isNaN(bal)) return;
+    const now = new Date().toISOString();
+    const doc = { name, type, institution: "Added by hand", last4: "", manual: true, balance: LIAB_TYPES.has(type) ? -bal : bal,
+      apr: num("acctApr"), payment: num("acctPay"), currency: "USD", balanceDate: now.slice(0, 10), updatedAt: now };
+    write(async db => { await db.doc(`accounts/m_${slug(name).slice(0, 40)}-${Math.random().toString(36).slice(2, 6)}`).set(doc); e.target.reset(); }, `${name} added`);
+    return;
+  }
   if (e.target.id !== "billForm") return;
   e.preventDefault();
   const name = document.getElementById("billName").value.trim();

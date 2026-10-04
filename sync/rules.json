@@ -167,7 +167,18 @@
     "PERSHING",
     "EPAY",
     "MOBILE PAYMENT",
-    "ELECTRONIC TRANSFER"
+    "ELECTRONIC TRANSFER",
+    "NELNET",
+    "MOHELA",
+    "AIDVANTAGE",
+    "NAVIENT",
+    "EDFINANCIAL",
+    "GREAT LAKES",
+    "DEPT EDUCATION",
+    "DEPT OF ED",
+    "SALLIE MAE",
+    "STUDENT LN",
+    "STUDENT LOAN"
   ],
   "income_keywords": [
     "PAYROLL",
