@@ -36,6 +36,10 @@
   --line: #29332e; --accent: #5cc29e; --accent-soft: #1d3a30; --bar-rest: #2f6553;
   --good: #4cbf5a; --warn: #f0b429; --warn-fill: #f0b429; --crit: #ec6a66; --s-in: #3fa982; --s-out: #8f86e6; color-scheme: dark;
 }
+/* Get In Tune side: its own palette, same structure. Provisional until her site's brand colors are applied. */
+body[data-space="biz"] { --bg: #f6f3f8; --accent: #6b3fa0; --accent-soft: #ece3f6; --bar-rest: #c9b6e2; --line: #e3dceb; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body[data-space="biz"] { --bg: #131017; --surface: #1b1721; --accent: #b99be3; --accent-soft: #2d2340; --bar-rest: #5b4783; --line: #2f2839; } }
+:root[data-theme="dark"] body[data-space="biz"] { --bg: #131017; --surface: #1b1721; --accent: #b99be3; --accent-soft: #2d2340; --bar-rest: #5b4783; --line: #2f2839; }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); font-variant-numeric: tabular-nums; }
 h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
@@ -48,7 +52,14 @@ button, input, select { font: inherit; color: inherit; }
 .top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 14px 0; }
 .brand { display: flex; align-items: baseline; gap: 10px; flex: 1 1 auto; min-width: 0; }
 .brand h1 { font-size: 1.45rem; }
-.brand span { color: var(--muted); font-size: .85rem; }
+.brand { flex-wrap: wrap; row-gap: 0; }
+.brand span#monthLabel { white-space: nowrap; }
+.space-pick { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: 8px; }
+.space-pick::after { content: ""; width: 7px; height: 7px; border-right: 2.5px solid var(--accent); border-bottom: 2.5px solid var(--accent); transform: translateY(-3px) rotate(45deg); }
+.space-pick:hover, .space-pick:focus-within { background: var(--accent-soft); }
+.space-pick:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.space-pick select { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; font: 16px var(--font-body); }
+.brand #monthLabel { color: var(--muted); font-size: .85rem; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); white-space: nowrap; }
 .chip i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
 .chip.good { color: var(--good); } .chip.warn { color: var(--warn); } .chip.crit { color: var(--crit); }
@@ -195,15 +206,9 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 
 <header class="top">
   <div class="wrap">
-    <div class="brand"><h1>Patterson Spending</h1><span id="monthLabel"></span></div>
+    <div class="brand"><h1 class="space-pick"><span id="spaceName" aria-hidden="true">Patterson Spending</span><select id="spaceSel" aria-label="Switch between personal and Get In Tune"><option value="home">Patterson Spending</option><option value="biz">Get In Tune</option></select></h1><span id="monthLabel"></span></div>
     <span id="syncChip" class="chip"><i></i>Connecting…</span>
     <nav class="tabs" role="tablist" aria-label="Views">
-      <button role="tab" data-tab="month" aria-selected="true">This Month</button>
-      <button role="tab" data-tab="where" aria-selected="false">Where It Goes</button>
-      <button role="tab" data-tab="worth" aria-selected="false">Net Worth &amp; Debt</button>
-      <button role="tab" data-tab="bills" aria-selected="false">Bills</button>
-      <button role="tab" data-tab="biz" aria-selected="false">Business</button>
-      <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
     </nav>
   </div>
 </header>
@@ -217,7 +222,11 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 const CATEGORIES = ["Groceries","Dining","Shopping","Gas","Transportation","Utilities","Subscriptions","Insurance","Health","Home","Kids","Travel","Entertainment","Games","Gifts","Fees","Income","Transfer","Uncategorized"];
 const NOT_SPENDING = new Set(["Income","Transfer"]);
 // txns = household only; allTxns = every account (last 7 months); bizTxns = business accounts since January 1.
-const S = { tab: "month", accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
+const SPACES = {
+  home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["ask", "Ask"]] },
+  biz: { title: "Get In Tune", sub: "Music therapy practice", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["ask", "Ask"]] },
+};
+const S = { space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
   invoices: [], mileage: [], taxPayments: [], bizMeta: null, bizSub: "overview", bizSearch: "", bizTodo: false,
   ready: { accounts: false, txns: false }, sample: undefined, sampleTools: false, chat: [], draft: "", asking: null, whereMonth: null, search: "", catFilter: "", error: null };
 
@@ -233,8 +242,28 @@ const monthName = (key, style = "long") => new Date(+key.slice(0, 4), +key.slice
 const lastMonths = n => Array.from({ length: n }, (_, i) => ym(new Date(today.getFullYear(), today.getMonth() - (n - 1 - i), 1)));
 const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
 
-try { const t = localStorage.getItem("ps-tab"); if (t) S.tab = t; const b = localStorage.getItem("ps-bizsub"); if (b) S.bizSub = b; } catch (e) {}
-if (/^#(month|where|worth|bills|biz|ask)$/.test(location.hash)) S.tab = location.hash.slice(1);
+try { const sp = localStorage.getItem("ps-space"); if (SPACES[sp]) S.space = sp; const lt = JSON.parse(localStorage.getItem("ps-lasttab") || "null"); if (lt) Object.assign(S.lastTab, lt); } catch (e) {}
+if (/^#(biz|getintune)$/.test(location.hash)) S.space = "biz";
+else if (/^#(month|where|worth|bills)$/.test(location.hash)) { S.space = "home"; S.lastTab.home = location.hash.slice(1); }
+function setTab(key) { // "month" | "ask" | "biz:invoices" ...
+  S.lastTab[S.space] = key;
+  if (key.startsWith("biz:")) { S.tab = "biz"; S.bizSub = key.slice(4); } else S.tab = key;
+  try { localStorage.setItem("ps-lasttab", JSON.stringify(S.lastTab)); } catch (e) {}
+}
+function setSpace(sp) {
+  S.chatBy[S.space] = S.chat; S.space = sp; S.chat = S.chatBy[sp]; S.draft = ""; S.detail = null; document.body.style.overflow = "";
+  try { localStorage.setItem("ps-space", sp); } catch (e) {}
+  setTab(S.lastTab[sp]);
+}
+const tabKey = () => S.tab === "biz" ? `biz:${S.bizSub}` : S.tab;
+function renderTabs() {
+  const sp = SPACES[S.space], nav = document.querySelector("nav.tabs"), key = tabKey();
+  document.body.dataset.space = S.space;
+  const sel = document.getElementById("spaceSel"); if (sel.value !== S.space) sel.value = S.space;
+  document.getElementById("spaceName").textContent = sp.title;
+  const html = sp.tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${k === key}">${esc(l)}</button>`).join("");
+  if (nav.dataset.sig !== S.space + key) { nav.innerHTML = html; nav.dataset.sig = S.space + key; }
+}
 
 function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2200); }
 async function write(fn, okMsg) {
@@ -616,11 +645,9 @@ function pairBars(months, a, b) {
 }
 
 function viewBiz() {
-  const subs = [["overview", "Overview"], ["invoices", "Invoices"], ["mileage", "Mileage"], ["taxes", "Taxes"], ["setup", "Setup"]];
-  const nav = `<div class="controls"><div class="seg" role="group" aria-label="Business sections">${subs.map(([k, l]) => `<button data-bizsub="${k}" aria-pressed="${S.bizSub === k}">${l}</button>`).join("")}</div></div>`;
-  const note = !bizIds().length && S.bizSub !== "setup" ? `<div class="notice">Mark the business bank accounts and cards in <b>Setup</b> to fill in income and expenses. Invoices and mileage work right away.</div>` : "";
+  const note = !bizIds().length && S.bizSub !== "setup" ? `<div class="notice">Mark Get In Tune's bank accounts and cards in <button class="btn link" style="padding:0;color:var(--accent);font-weight:600" data-bizsub="setup">Setup</button> to fill in income and expenses. Invoices and mileage work right away.</div>` : "";
   const v = { overview: viewBizOverview, invoices: viewInvoices, mileage: viewMileage, taxes: viewTaxes, setup: viewBizSetup }[S.bizSub] || viewBizOverview;
-  return nav + note + v();
+  return note + v();
 }
 
 function viewBizOverview() {
@@ -841,7 +868,12 @@ const SUGGESTIONS = [
   "Which debt should we pay off first?",
   "How many months of expenses does our savings cover?",
   "Set budgets for next month based on what we usually spend",
-  "Can the business afford a $1,200 keyboard this quarter?",
+];
+const BIZ_SUGGESTIONS = [
+  "Can Get In Tune afford a $1,200 keyboard this quarter?",
+  "How much should I set aside for my next quarterly tax payment?",
+  "Which invoices are late, and how much is outstanding?",
+  "Which service earns the most after expenses?",
 ];
 function financeSnapshot() {
   const months = lastMonths(7), full = months.slice(0, 6), recent = months.slice(3, 6);
@@ -1017,7 +1049,7 @@ function viewAsk() {
   return `<section class="panel ask">
     <div class="panel-head"><h2>Ask about your money</h2><p>Answers use the numbers on this dashboard${S.chat.length ? ` · <button class="btn link" id="chatClear">Clear</button>` : ""}</p></div>
     <div class="thread" id="thread">${msgs || `<p class="intro">Ask anything about your spending, debts or bills, or name something you want to buy and get a plan for fitting it in. You can also ask for changes, like new budgets or bills. Each one waits for you to tap Apply.</p>`}</div>
-    ${S.chat.length ? "" : `<div class="chips">${SUGGESTIONS.map(s => `<button class="chip-btn" data-suggest="${esc(s)}">${esc(s)}</button>`).join("")}</div>`}
+    ${S.chat.length ? "" : `<div class="chips">${(S.space === "biz" ? BIZ_SUGGESTIONS : SUGGESTIONS).map(s => `<button class="chip-btn" data-suggest="${esc(s)}">${esc(s)}</button>`).join("")}</div>`}
     <form class="composer" id="askForm">
       <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. Can we afford a $2,345 e-bike this spring?" aria-label="Your question">${esc(S.draft)}</textarea>
       ${S.asking ? `<button class="btn" type="button" id="askStop">Stop</button>` : `<button class="btn primary" type="submit">Ask</button>`}
@@ -1034,7 +1066,8 @@ async function ask(question) {
   render(true); scrollThread();
   const history = S.chat.slice(0, -1).filter(m => m.content).slice(-12);
   while (history.length && history[0].role !== "user") history.shift();
-  const input = [{ role: "user", content: COMPANION_RULES + financeSnapshot() }, ...history];
+  const focus = S.space === "biz" ? "\n\nThe person is on the Get In Tune side of the dashboard (her music therapy practice). Answer from the BUSINESS section unless they ask about the household.\n\n" : "\n\nThe person is on the personal (household) side of the dashboard.\n\n";
+  const input = [{ role: "user", content: COMPANION_RULES + financeSnapshot() + focus }, ...history];
   const bubble = () => document.querySelector("#thread .msg.assistant:last-child");
   const opts = { signal: S.asking.signal, onText: ({ text }) => { reply.content = text; const b = bubble(); if (b) b.innerHTML = md(text); scrollThread(); } };
   if (S.sampleTools) opts.tools = [findTool, ...(S.canWrite && S.db ? proposeTools(reply) : [])]; else opts.cache = false;
@@ -1107,15 +1140,15 @@ function render(force) {
   const ae = document.activeElement;
   if (!force && ae && app.contains(ae) && (ae.matches("input:not([type=checkbox]),select"))) { pendingRender = true; return; }
   pendingRender = false;
-  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === S.tab));
-  document.getElementById("monthLabel").textContent = monthName(thisMonth);
+  renderTabs();
+  document.getElementById("monthLabel").textContent = S.space === "biz" ? `${SPACES.biz.sub} · ${monthName(thisMonth)}` : monthName(thisMonth);
   renderChip();
   let notice = "";
   if (S.error) notice = `<div class="notice crit">${esc(S.error)}</div>`;
   else if (S.accounts.some(a => a.demo)) notice = `<div class="notice">These are <b>example numbers</b> so you can try the layout. Your real accounts replace them after the first bank sync.</div>`;
   if (!S.db && !S.error) { app.innerHTML = notice + `<div class="empty">Sign in to claude.ai to see the household numbers.</div>`; return; }
   if (!S.ready.accounts || !S.ready.txns) { app.innerHTML = `<div class="empty">Loading your household numbers…</div>`; return; }
-  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, biz: viewBiz, ask: viewAsk }[S.tab] || viewMonth;
+  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, biz: viewBiz, ask: viewAsk }[S.tab] || (S.space === "biz" ? viewBiz : viewMonth);
   app.innerHTML = notice + v() + detailHtml();
 }
 function renderChip() {
@@ -1136,9 +1169,9 @@ function renderChip() {
 /* ---------- events ---------- */
 document.querySelector("nav.tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-tab]"); if (!b) return;
-  S.tab = b.dataset.tab; try { localStorage.setItem("ps-tab", S.tab); } catch (err) {}
-  render(true); window.scrollTo({ top: 0 });
+  setTab(b.dataset.tab); render(true); window.scrollTo({ top: 0 });
 });
+document.getElementById("spaceSel").addEventListener("change", e => { setSpace(e.target.value); render(true); window.scrollTo({ top: 0 }); });
 const app = document.getElementById("app");
 app.addEventListener("click", e => {
   const ap = e.target.closest("[data-apply],[data-dismiss]");
@@ -1161,10 +1194,10 @@ app.addEventListener("click", e => {
   if (e.target.closest("[data-close-detail]")) { closeDetail(); return; }
   const dt = e.target.closest("[data-detail]");
   if (dt && !e.target.closest("input,select,button,a,label")) { openDetail(dt); return; }
-  const go = e.target.closest("[data-goto]"); if (go) { S.tab = go.dataset.goto; render(true); return; }
+  const go = e.target.closest("[data-goto]"); if (go) { setTab(go.dataset.goto); render(true); return; }
   const m = e.target.closest("[data-month]"); if (m && S.tab === "where") { S.whereMonth = m.dataset.month; render(true); return; }
   const sub = e.target.closest("[data-bizsub]");
-  if (sub) { S.bizSub = sub.dataset.bizsub; try { localStorage.setItem("ps-bizsub", S.bizSub); } catch (err) {} render(true); return; }
+  if (sub) { setTab(`biz:${sub.dataset.bizsub}`); render(true); return; }
   const ip = e.target.closest("[data-invpaid]"); if (ip) { write(db => db.doc(`invoices/${ip.dataset.invpaid}`).update({ paidDate: todayKey }), "Marked paid"); return; }
   const iu = e.target.closest("[data-invunpaid]"); if (iu) { write(db => db.doc(`invoices/${iu.dataset.invunpaid}`).update({ paidDate: null }), "Moved back to open"); return; }
   const ld = e.target.closest("[data-linedel]");
@@ -1319,6 +1352,7 @@ function watchBiz() { // business accounts get their own query so profit and tax
     .onSnapshot(s => { S.bizTxns = docs(s); render(); }, fail);
 }
 async function start() {
+  S.chat = S.chatBy[S.space]; setTab(S.lastTab[S.space] || SPACES[S.space].tabs[0][0]);
   render(true);
   window.claude?.use?.("permissions").then(p => { S.perms = p || null; }).catch(() => {});
   window.claude?.use?.("sample").then(async fn => {
