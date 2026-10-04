@@ -38,7 +38,8 @@ def main(argv=None):
         if not access_url:
             print("SIMPLEFIN_ACCESS_URL is not set", file=sys.stderr)
             return 2
-        raw = fetch_accounts(access_url, days=args.days)
+        # SimpleFIN serves at most 90 days and warns if asked for exactly 90 (clock skew).
+        raw = fetch_accounts(access_url, days=min(args.days, 89))
 
     overrides = json.loads(Path(args.overrides).read_text()) if args.overrides else None
     result = normalize(raw, load_rules(args.rules, overrides))

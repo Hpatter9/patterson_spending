@@ -181,7 +181,7 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const CATEGORIES = ["Groceries","Dining","Shopping","Gas","Transportation","Utilities","Subscriptions","Insurance","Health","Home","Kids","Travel","Entertainment","Gifts","Fees","Income","Transfer","Uncategorized"];
+const CATEGORIES = ["Groceries","Dining","Shopping","Gas","Transportation","Utilities","Subscriptions","Insurance","Health","Home","Kids","Travel","Entertainment","Games","Gifts","Fees","Income","Transfer","Uncategorized"];
 const NOT_SPENDING = new Set(["Income","Transfer"]);
 const S = { tab: "month", accounts: [], txns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
   ready: { accounts: false, txns: false }, sample: undefined, sampleTools: false, chat: [], draft: "", asking: null, whereMonth: null, search: "", catFilter: "", error: null };
@@ -218,6 +218,7 @@ function spendByCat(month) {
 const total = m => [...m.values()].reduce((a, b) => a + b, 0);
 const incomeFor = month => S.txns.filter(t => t.date?.startsWith(month) && t.category === "Income").reduce((a, t) => a + t.amount, 0);
 const isAsset = a => a.type === "checking" || a.type === "savings";
+const isLiability = a => a.type === "credit" || a.type === "loan";
 function nextDue(bill) {
   const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const on = offset => { const f = new Date(today.getFullYear(), today.getMonth() + offset, 1);
@@ -323,7 +324,7 @@ function viewMonth() {
     </section>
     <section class="panel">
       <div class="panel-head"><h2>Net worth</h2><p>${S.accounts.length} account${S.accounts.length === 1 ? "" : "s"}</p></div>
-      <div class="fig" style="border:0;padding:0"><div class="value">${usd0.format(netWorth)}</div><div class="sub">${usd0.format(S.accounts.filter(isAsset).reduce((a, x) => a + x.balance, 0))} cash · ${usd0.format(-S.accounts.filter(a => !isAsset(a)).reduce((a, x) => a + x.balance, 0))} owed</div></div>
+      <div class="fig" style="border:0;padding:0"><div class="value">${usd0.format(netWorth)}</div><div class="sub">${usd0.format(S.accounts.filter(isAsset).reduce((a, x) => a + x.balance, 0))} cash · ${S.accounts.some(a => a.type === "investment") ? usd0.format(S.accounts.filter(a => a.type === "investment").reduce((a, x) => a + x.balance, 0)) + " invested · " : ""}${usd0.format(-S.accounts.filter(isLiability).reduce((a, x) => a + x.balance, 0))} owed</div></div>
       ${lineChart(netWorthSeries())}
       <button class="btn" data-goto="worth">See accounts and debts</button>
     </section>
@@ -395,7 +396,9 @@ function acctEdit(a, field, label, suffix = "") {
   return S.canWrite ? `<label>${label} <input type="number" step="any" min="0" inputmode="decimal" id="${field}-${esc(a.id)}" data-acct="${esc(a.id)}" data-field="${field}" value="${esc(v)}">${suffix}</label>` : (v !== "" ? `<span>${label} ${esc(v)}${suffix}</span>` : "");
 }
 function viewWorth() {
-  const assets = S.accounts.filter(isAsset), cards = S.accounts.filter(a => a.type === "credit"), loans = S.accounts.filter(a => a.type === "loan");
+  const byDebt = (a, b) => a.balance - b.balance;
+  const assets = S.accounts.filter(isAsset), invest = S.accounts.filter(a => a.type === "investment");
+  const cards = S.accounts.filter(a => a.type === "credit").sort(byDebt), loans = S.accounts.filter(a => a.type === "loan").sort(byDebt);
   const sum = l => l.reduce((a, x) => a + (+x.balance || 0), 0);
   const nw = sum(S.accounts), series = netWorthSeries();
   const first = series.find(p => p.d >= `${lastMonths(6)[0]}-01`) || series[0];
@@ -413,14 +416,14 @@ function viewWorth() {
   return `
   <div class="figures">
     <div class="fig"><div class="label">Net worth</div><div class="value">${usd0.format(nw)}</div><div class="sub">${first ? `${change >= 0 ? "Up" : "Down"} ${usd0.format(Math.abs(change))} since ${new Date(first.d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "Trend starts after the first sync"}</div></div>
-    <div class="fig"><div class="label">Cash</div><div class="value">${usd0.format(sum(assets))}</div><div class="sub">${assets.length} account${assets.length === 1 ? "" : "s"}</div></div>
+    <div class="fig"><div class="label">Cash</div><div class="value">${usd0.format(sum(assets))}</div><div class="sub">${assets.length} account${assets.length === 1 ? "" : "s"}${invest.length ? ` · ${usd0.format(sum(invest))} invested` : ""}</div></div>
     <div class="fig"><div class="label">Total debt</div><div class="value">${usd0.format(-sum([...cards, ...loans]))}</div><div class="sub">${usd0.format(-sum(cards))} cards · ${usd0.format(-sum(loans))} loans</div></div>
     <div class="fig"><div class="label">Card utilization</div><div class="value">${util == null ? "—" : Math.round(util * 100) + "%"}</div><div class="sub">${util == null ? "Add card limits below" : util > 0.3 ? "Above 30% can lower credit scores" : "Under the 30% guideline"}</div></div>
   </div>
   <div class="cols">
     <section class="panel">
       <div class="panel-head"><h2>Accounts</h2><p>Debts shown as negative balances</p></div>
-      ${S.accounts.length ? group("Cash", assets.map(a => `<div class="acct">${head(a, ` · ${a.type}`)}</div>`).join(""), assets) + group("Credit cards", cardHtml, cards) + group("Loans", loanHtml, loans) : `<p class="empty">No accounts yet. They appear after the first bank sync.</p>`}
+      ${S.accounts.length ? group("Cash", assets.map(a => `<div class="acct">${head(a, ` · ${a.type}`)}</div>`).join(""), assets) + group("Investments", invest.map(a => `<div class="acct">${head(a)}</div>`).join(""), invest) + group("Credit cards", cardHtml, cards) + group("Loans", loanHtml, loans) : `<p class="empty">No accounts yet. They appear after the first bank sync.</p>`}
     </section>
     <section class="panel">
       <div class="panel-head"><h2>Net worth over time</h2><p>One point per daily sync</p></div>
@@ -439,7 +442,7 @@ function viewBills() {
   const items = S.bills.map(b => ({ b, n: nextDue(b), paid: b.paidMonth === thisMonth })).sort((a, b) => (a.paid - b.paid) || (a.n.date - b.n.date));
   const unpaid = items.filter(i => !i.paid), dueSoon = unpaid.filter(i => i.n.overdue || i.n.days <= 7);
   const monthTotal = S.bills.reduce((a, b) => a + (+b.amount || 0), 0);
-  const acctOpts = S.accounts.filter(a => !isAsset(a)).map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.last4 ? " ·" + esc(a.last4) : ""}</option>`).join("");
+  const acctOpts = S.accounts.filter(isLiability).map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.last4 ? " ·" + esc(a.last4) : ""}</option>`).join("");
   return `
   <div class="figures">
     <div class="fig"><div class="label">Due in the next 7 days</div><div class="value">${usd0.format(dueSoon.reduce((a, i) => a + (+i.b.amount || 0), 0))}</div><div class="sub">${dueSoon.length} bill${dueSoon.length === 1 ? "" : "s"}</div></div>

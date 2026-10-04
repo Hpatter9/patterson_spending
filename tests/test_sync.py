@@ -55,6 +55,38 @@ class NormalizeTest(unittest.TestCase):
         pending = [t for t in run()["transactions"] if t["pending"]]
         self.assertEqual([t["description"] for t in pending], ["NETFLIX.COM"])
 
+    def test_account_type_detection(self):
+        cases = {
+            ("Venture X", "Capital One"): "credit",
+            ("World of Hyatt", "Chase Bank"): "credit",
+            ("Blue Cash Everyday®", "American Express"): "credit",
+            ("Everyday Checking", "Example Bank"): "checking",
+            ("Live Life Funds", "Bank of America"): "checking",
+            ("Roth IRA Brokerage Account", "Vanguard"): "investment",
+            ("65 LIFE", "NorthWestern Mutual"): "investment",
+            ("Joint Savings", "Bellco Credit Union"): "savings",
+            ("Auto Loan 3333", "Example Auto Finance"): "loan",
+            ("M. WOODS", "Chase Bank"): "credit",
+            ("H. PATTERSON", "Chase Bank"): "credit",
+            ("M. WOODS (...7731)", "Chase Bank"): "credit",
+            ("M. WOODS 7731", "Chase Bank"): "credit",
+        }
+        for (name, inst), want in cases.items():
+            self.assertEqual(account_type(name, institution=inst), want, name)
+
+    def test_interest_charges_mean_credit(self):
+        self.assertEqual(account_type("monaay", institution="Bank of America", descriptions=["Interest Charge"]), "credit")
+        self.assertEqual(account_type("monaay", institution="Bank of America", descriptions=["Interest Income"]), "checking")
+
+    def test_hidden_accounts_are_dropped(self):
+        raw = json.loads(FIXTURE.read_text())
+        loan_id = next(a for a in run()["accounts"] if a["type"] == "loan")["id"]
+        rules = load_rules()
+        rules["account_types"] = {loan_id: "hidden", "ACT-card-1": "hidden"}  # dashboard id and SimpleFIN id
+        result = normalize(raw, rules, now=NOW)
+        self.assertEqual([a["type"] for a in result["accounts"]], ["checking"])
+        self.assertEqual(len(result["transactions"]), 4)
+
     def test_account_type_override(self):
         self.assertEqual(account_type("Joint Account"), "checking")
         self.assertEqual(account_type("Joint Account", "savings"), "savings")

@@ -9,10 +9,16 @@ from datetime import datetime, timezone
 
 from .categorize import categorize
 
-LOAN_WORDS = ("LOAN", "MORTGAGE", "AUTO", "STUDENT", "HELOC", "LINE OF CREDIT")
-CREDIT_WORDS = ("CREDIT", "CARD", "VISA", "MASTERCARD", "AMEX", "DISCOVER", "REWARDS", "SAPPHIRE", "FREEDOM")
+LOAN_WORDS = ("LOAN", "MORTGAGE", "AUTO ", "STUDENT", "HELOC", "LINE OF CREDIT")
+CREDIT_WORDS = ("CREDIT", "CARD", "VISA", "MASTERCARD", "AMEX", "DISCOVER", "REWARDS", "SAPPHIRE", "FREEDOM",
+                "VENTURE", "BLUE CASH", "EVERYDAY", "SLATE", "HYATT", "FRONTIER", "WYNDHAM", "SIMPLICITY",
+                "BANKAMERICARD", "PLATINUM", "EARNER", "PRIORITY")
 SAVINGS_WORDS = ("SAVING", "MONEY MARKET", "CD ")
+INVESTMENT_WORDS = ("IRA", "BROKERAGE", "ROTH", "401K", "403B", "ANNUITY", "INVESTMENT")
+INVESTMENT_INSTITUTIONS = ("VANGUARD", "NORTHWESTERN MUTUAL", "FIDELITY", "SCHWAB", "BETTERMENT", "WEALTHFRONT")
+CARD_ISSUERS = ("AMERICAN EXPRESS", "BARCLAYS", "CAPITAL ONE", "DISCOVER")  # rarely anything but cards here
 LIABILITY_TYPES = ("credit", "loan")
+HIDDEN = "hidden"
 
 
 def doc_id(prefix, *parts):
@@ -20,16 +26,29 @@ def doc_id(prefix, *parts):
     return prefix + "_" + hashlib.sha1("|".join(parts).encode()).hexdigest()[:16]
 
 
-def account_type(name, override=None):
+CARDHOLDER_NAME = re.compile(r"^[A-Z]\. ?[A-Z' -]+$")  # Chase labels some cards "M. WOODS"
+
+
+def account_type(name, override=None, institution="", descriptions=()):
     if override:
         return override
-    text = f"{name} ".upper()
+    text, inst = f"{name} ".upper(), (institution or "").upper()
+    if any(w in inst for w in INVESTMENT_INSTITUTIONS) or any(f" {w} " in f" {text} " for w in INVESTMENT_WORDS):
+        return "investment"
     if any(w in text for w in LOAN_WORDS):
         return "loan"
+    if "CHECKING" in text:
+        return "checking"
     if any(w in text for w in CREDIT_WORDS):
         return "credit"
     if any(w in text for w in SAVINGS_WORDS):
         return "savings"
+    if any(w in inst for w in CARD_ISSUERS) and "360" not in text:
+        return "credit"
+    # Unlabeled accounts: a cardholder name, or interest charges, mean a credit card.
+    bare = re.sub(r"[\s(.x-]*\d{4}\)?\s*$", "", (name or "").strip().upper(), flags=re.I)
+    if CARDHOLDER_NAME.match(bare) or any("INTEREST CHARGE" in d.upper() for d in descriptions):
+        return "credit"
     return "checking"
 
 
@@ -51,7 +70,12 @@ def normalize(raw, rules, now=None):
         org = acct.get("org") or {}
         institution = org.get("name") or org.get("domain") or "Unknown"
         acct_id = doc_id("a", institution, acct["id"])
-        kind = account_type(acct.get("name", ""), type_overrides.get(acct["id"]))
+        # Overrides in rules.json may use the dashboard id (a_...) or SimpleFIN's own id.
+        descriptions = [t.get("description") or "" for t in acct.get("transactions", [])]
+        kind = account_type(acct.get("name", ""), type_overrides.get(acct_id) or type_overrides.get(acct["id"]),
+                            institution, descriptions)
+        if kind == HIDDEN:  # duplicates, $0 policies and other accounts not worth tracking
+            continue
         balance = float(acct.get("balance") or 0)
         # Banks report card/loan balances with either sign; store liabilities as negative.
         if kind in LIABILITY_TYPES:

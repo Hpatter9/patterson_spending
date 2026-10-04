@@ -11,7 +11,7 @@ Sync the Patterson Spending dashboard at https://claude.ai/artifact/8Aq4chNUNzxC
 1. If `SIMPLEFIN_ACCESS_URL` is not set, write doc `meta/sync` as `{status: "error", message: "SIMPLEFIN_ACCESS_URL is missing from the environment settings", at: <now>}`. Send a push notification saying so, then stop.
 2. Read the dashboard's `rules` collection with ArtifactData `list`. Write it to `out/overrides.json` as `{"<merchant>": "<category>"}`.
 3. Run `python -m sync.main --overrides out/overrides.json`. If it fails, write `meta/sync` as `{status: "error", message, at}`, send a push notification with the error, and stop.
-4. In `out/sync.json`, give each `Uncategorized` transaction its best category from: Groceries, Dining, Shopping, Gas, Transportation, Utilities, Subscriptions, Insurance, Health, Home, Kids, Travel, Entertainment, Gifts, Fees, Income, Transfer. Leave it `Uncategorized` if it's unclear.
+4. In `out/sync.json`, give each `Uncategorized` transaction its best category from: Groceries, Dining, Shopping, Gas, Transportation, Utilities, Subscriptions, Insurance, Health, Home, Kids, Travel, Entertainment, Games, Gifts, Fees, Income, Transfer. Leave it `Uncategorized` if it's unclear.
 5. Export the current database with ArtifactData `list` and `out_dir: out/existing`, paging with `cursor` until done:
    - `accounts`
    - `transactions` (query `where date >= <earliest date in out/sync.json>`, limit 1000)
