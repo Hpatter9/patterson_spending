@@ -138,6 +138,23 @@ form.add { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minm
 form.add label { display: grid; gap: 2px; font-size: .78rem; color: var(--muted); }
 form.add input, form.add select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 8px; width: 100%; }
 
+.ask { gap: 12px; }
+.thread { display: grid; gap: 12px; max-height: min(60vh, 560px); overflow-y: auto; padding-right: 4px; }
+.thread .intro { color: var(--ink-2); margin: 0; }
+.msg { max-width: 85%; padding: 10px 14px; border-radius: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.msg.user { justify-self: end; background: var(--accent); color: var(--bg); border-bottom-right-radius: 4px; white-space: pre-wrap; }
+.msg.assistant { justify-self: start; background: var(--bg); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg p { margin: 0 0 8px; } .msg p:last-child { margin-bottom: 0; }
+.msg ul, .msg ol { margin: 4px 0 8px; padding-left: 20px; }
+.msg-err { color: var(--crit); font-size: .85rem; }
+.thinking { color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .thinking { animation: pulse 1.4s ease-in-out infinite; } @keyframes pulse { 50% { opacity: .4; } } }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: .85rem; text-align: left; }
+.chip-btn:hover { border-color: var(--accent); }
+.composer { display: flex; gap: 8px; align-items: flex-end; }
+.composer textarea { flex: 1 1 auto; min-width: 0; resize: vertical; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 8px 10px; font: inherit; }
+@media (max-width: 520px) { .msg { max-width: 100%; } }
 .empty { color: var(--muted); padding: 24px 8px; text-align: center; }
 .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--ink); color: var(--bg); padding: 6px 10px; border-radius: 8px; font-size: .8rem; max-width: 240px; }
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: .85rem; z-index: 30; }
@@ -153,6 +170,7 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
       <button role="tab" data-tab="where" aria-selected="false">Where It Goes</button>
       <button role="tab" data-tab="worth" aria-selected="false">Net Worth &amp; Debt</button>
       <button role="tab" data-tab="bills" aria-selected="false">Bills</button>
+      <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
     </nav>
   </div>
 </header>
@@ -166,7 +184,7 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 const CATEGORIES = ["Groceries","Dining","Shopping","Gas","Transportation","Utilities","Subscriptions","Insurance","Health","Home","Kids","Travel","Entertainment","Gifts","Fees","Income","Transfer","Uncategorized"];
 const NOT_SPENDING = new Set(["Income","Transfer"]);
 const S = { tab: "month", accounts: [], txns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
-  ready: { accounts: false, txns: false }, whereMonth: null, search: "", catFilter: "", error: null };
+  ready: { accounts: false, txns: false }, sample: undefined, sampleTools: false, chat: [], draft: "", asking: null, whereMonth: null, search: "", catFilter: "", error: null };
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -181,7 +199,7 @@ const lastMonths = n => Array.from({ length: n }, (_, i) => ym(new Date(today.ge
 const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
 
 try { const t = localStorage.getItem("ps-tab"); if (t) S.tab = t; } catch (e) {}
-if (/^#(month|where|worth|bills)$/.test(location.hash)) S.tab = location.hash.slice(1);
+if (/^#(month|where|worth|bills|ask)$/.test(location.hash)) S.tab = location.hash.slice(1);
 
 function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2200); }
 async function write(fn, okMsg) {
@@ -449,6 +467,120 @@ function viewBills() {
   </section>` : ""}`;
 }
 
+/* ---------- companion ---------- */
+const SUGGESTIONS = [
+  "I want to buy an e-bike for $2,345. How do we fit that in?",
+  "Where did we overspend last month?",
+  "Which debt should we pay off first?",
+  "How many months of expenses does our savings cover?",
+];
+function financeSnapshot() {
+  const months = lastMonths(7), full = months.slice(0, 6), recent = months.slice(3, 6);
+  const lines = [`Today: ${today.toDateString()} (day ${today.getDate()} of ${daysInMonth}).`];
+  if (S.accounts.some(a => a.demo)) lines.push("NOTE: these are example numbers, not the household's real accounts. Say so if relevant.");
+  lines.push("", "ACCOUNTS (debts negative):");
+  for (const a of S.accounts) lines.push(`- ${a.name} (${a.type}, ${a.institution}): ${usd.format(a.balance)}${a.apr != null ? `, APR ${a.apr}%` : ""}${a.limit ? `, limit ${usd0.format(a.limit)}` : ""}${a.payment ? `, payment ${usd0.format(a.payment)}/mo` : ""}`);
+  const nw = S.accounts.reduce((s, a) => s + (+a.balance || 0), 0);
+  const series = netWorthSeries(), past = d => series.filter(p => p.d <= d).pop();
+  lines.push(`Net worth now ${usd0.format(nw)}` + [90, 180].map(n => { const p = past(new Date(today - n * 864e5).toISOString().slice(0, 10)); return p ? `; ${n} days ago ${usd0.format(p.v)}` : ""; }).join(""));
+  lines.push("", `SPENDING BY CATEGORY PER MONTH (transfers and income excluded; ${monthName(thisMonth)} is partial):`);
+  const byMonth = Object.fromEntries(months.map(m => [m, spendByCat(m)]));
+  const cats = [...new Set(months.flatMap(m => [...byMonth[m].keys()]))];
+  lines.push(`category | ${months.map(m => monthName(m, "short")).join(" | ")} | budget`);
+  for (const c of cats) lines.push(`${c} | ${months.map(m => Math.round(byMonth[m].get(c) || 0)).join(" | ")} | ${S.budgets.find(b => b.category === c)?.limit ?? "-"}`);
+  lines.push(`TOTAL | ${months.map(m => Math.round(total(byMonth[m]))).join(" | ")} | ${S.budgets.reduce((a, b) => a + (+b.limit || 0), 0)}`);
+  lines.push(`INCOME | ${months.map(m => Math.round(incomeFor(m))).join(" | ")}`);
+  const avg = f => recent.reduce((a, m) => a + f(m), 0) / recent.length;
+  const acctType = new Map(S.accounts.map(a => [a.id, a.type]));
+  const fixed = S.bills.filter(b => acctType.get(b.accountId) !== "credit").reduce((a, b) => a + (+b.amount || 0), 0);
+  const inc = avg(incomeFor), sp = avg(m => total(byMonth[m]));
+  lines.push(`Last 3 full months average: income ${usd0.format(inc)}, spending ${usd0.format(sp)}.`);
+  lines.push(`Loan, mortgage and other non-card bills total ${usd0.format(fixed)}/month. Payments like these usually count as Transfers, so they are NOT in spending. Credit card payments cover spending already counted, so don't subtract them. Estimated money left each month: about ${usd0.format(inc - sp - fixed)}. If a bill below obviously already appears as a spending category, add it back.`);
+  for (const b of S.budgets.filter(b => !cats.includes(b.category))) lines.push(`(budget with no spending yet: ${b.category} ${b.limit})`);
+  lines.push("", "BILLS:");
+  for (const b of S.bills) lines.push(`- ${b.name}: ${usd.format(+b.amount || 0)} due day ${b.dueDay}${b.autopay ? ", autopay" : ""}${b.paidMonth === thisMonth ? ", paid this month" : ""}`);
+  if (!S.bills.length) lines.push("(none entered)");
+  return lines.join("\n");
+}
+const COMPANION_RULES = `You are the money companion inside the Patterson household's budget dashboard. You answer questions about their finances using ONLY the data below and the find_transactions tool if it is available. Never invent numbers; if something isn't in the data, say what's missing.
+
+How to answer:
+- Lead with the direct answer in one or two sentences, then the supporting numbers.
+- For a planned purchase: give 2-3 concrete ways to fit it in, using their real figures. For example: pay from savings and what that leaves; set aside a monthly amount for N months, naming which categories to trim and by how much, based on where they usually spend under or over budget; or split it. Then recommend one, with a target date. Flag high-APR card debt if paying that down first would be wiser. Don't suggest financing at a rate higher than their savings earn unless there's no other way.
+- Keep it short: under about 180 words unless they ask for detail. Use short bullet lists and **bold** for key numbers. No tables, no headings.
+- Be practical and kind, not preachy. Mention you're not a licensed financial advisor only when the question is about investing, taxes or legal matters.
+
+HOUSEHOLD DATA:
+`;
+const md = s => esc(s)
+  .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+  .replace(/^#{1,4}\s*(.+)$/gm, "<b>$1</b>")
+  .replace(/(?:^|\n)((?:[-*•] .+(?:\n|$))+)/g, (_, list) => `\n<ul>${list.trim().split("\n").map(l => `<li>${l.replace(/^[-*•] /, "")}</li>`).join("")}</ul>\n`)
+  .replace(/(?:^|\n)((?:\d+\. .+(?:\n|$))+)/g, (_, list) => `\n<ol>${list.trim().split("\n").map(l => `<li>${l.replace(/^\d+\. /, "")}</li>`).join("")}</ol>\n`)
+  .trim().split(/\n{2,}/).map(p => /^<(ul|ol)>/.test(p) ? p : `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
+const findTool = {
+  name: "find_transactions",
+  description: "Search the household's synced transactions from the last 7 months. Returns up to 40 matches, newest first: date, merchant, category, amount (negative = money out), account.",
+  inputSchema: { type: "object", properties: {
+    text: { type: "string", description: "Words to match in the merchant or description, e.g. 'amazon'" },
+    category: { type: "string", description: "Exact category name, e.g. 'Dining'" },
+    month: { type: "string", description: "Month as YYYY-MM" } } },
+  execute(input) {
+    const q = String(input.text || "").toLowerCase(), cat = String(input.category || ""), m = String(input.month || "");
+    const acct = new Map(S.accounts.map(a => [a.id, a.name]));
+    const rows = S.txns.filter(t => (!q || `${t.payee} ${t.description}`.toLowerCase().includes(q)) && (!cat || t.category === cat) && (!m || t.date?.startsWith(m)));
+    return { matches: rows.length, total: Math.round(rows.reduce((a, t) => a + t.amount, 0) * 100) / 100,
+      rows: rows.slice(0, 40).map(t => ({ date: t.date, merchant: t.payee || t.description, category: t.category, amount: t.amount, account: acct.get(t.accountId) || "" })) };
+  },
+};
+const AI_ERRORS = {
+  not_granted: "The companion needs your OK to use your Claude account. Reload the page and choose Allow when asked.",
+  rate_limited: "Too many questions at once. Wait a minute, then send again.",
+  prompt_too_large: "That conversation got too long. Select Clear and ask again.",
+  refused: "Claude couldn't answer that one. Try rephrasing.",
+  session_expired: "Your claude.ai sign-in expired. Reload the page.",
+};
+function viewAsk() {
+  if (S.sample === null) return `<section class="panel"><h2>Ask about your money</h2><p class="empty">The companion only works when this page is open on claude.ai while you're signed in.</p></section>`;
+  const msgs = S.chat.map((m, i) => `<div class="msg ${m.role}">${m.role === "user" ? esc(m.content) : m.content ? md(m.content) : `<span class="thinking">Thinking…</span>`}${m.error ? `<p class="msg-err">${esc(m.error)}</p>` : ""}</div>`).join("");
+  return `<section class="panel ask">
+    <div class="panel-head"><h2>Ask about your money</h2><p>Answers use the numbers on this dashboard${S.chat.length ? ` · <button class="btn link" id="chatClear">Clear</button>` : ""}</p></div>
+    <div class="thread" id="thread">${msgs || `<p class="intro">Ask anything about your spending, debts or bills, or name something you want to buy and get a plan for fitting it in.</p>`}</div>
+    ${S.chat.length ? "" : `<div class="chips">${SUGGESTIONS.map(s => `<button class="chip-btn" data-suggest="${esc(s)}">${esc(s)}</button>`).join("")}</div>`}
+    <form class="composer" id="askForm">
+      <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. Can we afford a $2,345 e-bike this spring?" aria-label="Your question">${esc(S.draft)}</textarea>
+      ${S.asking ? `<button class="btn" type="button" id="askStop">Stop</button>` : `<button class="btn primary" type="submit">Ask</button>`}
+    </form>
+  </section>`;
+}
+async function ask(question) {
+  question = question.trim();
+  if (!question || S.asking || !S.sample) return;
+  S.chat.push({ role: "user", content: question });
+  const reply = { role: "assistant", content: "" };
+  S.chat.push(reply);
+  S.draft = ""; S.asking = new AbortController();
+  render(true); scrollThread();
+  const history = S.chat.slice(0, -1).filter(m => m.content).slice(-12);
+  while (history.length && history[0].role !== "user") history.shift();
+  const input = [{ role: "user", content: COMPANION_RULES + financeSnapshot() }, ...history];
+  const bubble = () => document.querySelector("#thread .msg.assistant:last-child");
+  const opts = { signal: S.asking.signal, onText: ({ text }) => { reply.content = text; const b = bubble(); if (b) b.innerHTML = md(text); scrollThread(); } };
+  if (S.sampleTools) opts.tools = [findTool]; else opts.cache = false;
+  try {
+    const { text, truncated } = await S.sample(input, opts);
+    reply.content = text;
+    if (truncated) reply.error = "The answer was cut short. Ask for less at a time.";
+  } catch (e) {
+    reply.content = e?.text || "";
+    if (e?.code !== "cancelled") reply.error = AI_ERRORS[e?.code] || "Couldn't reach Claude. Check your connection and try again.";
+    if (e?.code === "cancelled" && !reply.content) reply.error = "Stopped.";
+  } finally {
+    S.asking = null; render(true); scrollThread();
+  }
+}
+function scrollThread() { const t = document.getElementById("thread"); if (t) t.scrollTop = t.scrollHeight; }
+
 /* ---------- render ---------- */
 let pendingRender = false;
 function render(force) {
@@ -464,7 +596,7 @@ function render(force) {
   else if (S.accounts.some(a => a.demo)) notice = `<div class="notice">These are <b>example numbers</b> so you can try the layout. Your real accounts replace them after the first bank sync.</div>`;
   if (!S.db && !S.error) { app.innerHTML = notice + `<div class="empty">Sign in to claude.ai to see the household numbers.</div>`; return; }
   if (!S.ready.accounts || !S.ready.txns) { app.innerHTML = `<div class="empty">Loading your household numbers…</div>`; return; }
-  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills }[S.tab] || viewMonth;
+  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, ask: viewAsk }[S.tab] || viewMonth;
   app.innerHTML = notice + v();
 }
 function renderChip() {
@@ -490,6 +622,9 @@ document.querySelector("nav.tabs").addEventListener("click", e => {
 });
 const app = document.getElementById("app");
 app.addEventListener("click", e => {
+  const sug = e.target.closest("[data-suggest]"); if (sug) { ask(sug.dataset.suggest); return; }
+  if (e.target.id === "askStop") { S.asking?.abort(); return; }
+  if (e.target.id === "chatClear") { S.chat = []; render(true); return; }
   const go = e.target.closest("[data-goto]"); if (go) { S.tab = go.dataset.goto; render(true); return; }
   const m = e.target.closest("[data-month]"); if (m && S.tab === "where") { S.whereMonth = m.dataset.month; render(true); return; }
   const del = e.target.closest("[data-del]");
@@ -499,6 +634,7 @@ app.addEventListener("click", e => {
   }
 });
 app.addEventListener("input", e => {
+  if (e.target.id === "askInput") { S.draft = e.target.value; return; }
   if (e.target.id === "txnSearch") { S.search = e.target.value; document.getElementById("txnList").innerHTML = txnTable(S.whereMonth || thisMonth); }
 });
 app.addEventListener("change", e => {
@@ -523,6 +659,7 @@ app.addEventListener("change", e => {
   if (t.dataset.paid) write(db => db.doc(`bills/${t.dataset.paid}`).update({ paidMonth: t.checked ? thisMonth : null }), t.checked ? "Marked paid" : "Marked unpaid");
 });
 app.addEventListener("submit", e => {
+  if (e.target.id === "askForm") { e.preventDefault(); ask(document.getElementById("askInput").value); return; }
   if (e.target.id !== "billForm") return;
   e.preventDefault();
   const name = document.getElementById("billName").value.trim();
@@ -530,6 +667,9 @@ app.addEventListener("submit", e => {
     accountId: document.getElementById("billAcct").value || null, autopay: document.getElementById("billAuto").checked, paidMonth: null };
   if (!name) return;
   write(async db => { await db.collection("bills").add(bill); e.target.reset(); }, "Bill added");
+});
+app.addEventListener("keydown", e => {
+  if (e.target.id === "askInput" && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(e.target.value); }
 });
 app.addEventListener("focusout", () => setTimeout(() => { if (pendingRender) render(); }, 0));
 
@@ -545,6 +685,11 @@ document.addEventListener("pointermove", e => {
 /* ---------- data ---------- */
 async function start() {
   render(true);
+  window.claude?.use?.("sample").then(async fn => {
+    S.sample = fn;
+    if (fn) S.sampleTools = !!(await fn.limits().catch(() => null))?.tools;
+    if (S.tab === "ask") render();
+  });
   const db = await window.claude?.use?.("db");
   if (!db) { render(true); return; }
   S.db = db;
