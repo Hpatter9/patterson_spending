@@ -17,7 +17,7 @@ Household and business budget tracker for the Patterson family. Several Claude s
 - Store client names or health details for the business. Use client codes or initials only.
 
 ## Current state
-**Bank sync.** The routine "Patterson Spending daily sync" (`trig_0116u3VdeDihQTkeJuVKZH1A`) runs at 5:49am America/Denver in the sync runner session. It follows `ROUTINE.md`, so change the steps there, not in the trigger.
+**Bank sync.** The routine "Patterson Spending daily sync" (`trig_01V6M5B6nfb3KVZThyC58i7n`) runs at 5:49am America/Denver in the sync runner session. It follows `ROUTINE.md`, so change the steps there, not in the trigger.
 - `sync/` pulls from SimpleFIN (`SIMPLEFIN_ACCESS_URL` is set in the environment settings) and categorizes with `sync/rules.json` for household accounts and `sync/business_rules.json` for business accounts.
 - `sync/plan_writes.py` turns `out/sync.json` into database batches. The database refuses changes to an existing row unless the write names the row's version, so new rows are sent as-is and changed rows go in a second pass with their versions.
 
