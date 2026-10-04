@@ -572,7 +572,8 @@ const findTool = {
   },
 };
 const AI_ERRORS = {
-  not_granted: "The companion needs your OK to use your Claude account. Reload the page and choose Allow when asked.",
+  not_granted: "Ask was declined for this page. Tap Check permissions to turn it back on.",
+  sampling_disabled: "Claude's Ask feature isn't available for this account.",
   rate_limited: "Too many questions at once. Wait a minute, then send again.",
   prompt_too_large: "That conversation got too long. Select Clear and ask again.",
   refused: "Claude couldn't answer that one. Try rephrasing.",
@@ -651,8 +652,14 @@ function actionsHtml(m, i) {
     a.state === "pending" ? `<span class="proposal-btns"><button class="btn primary" data-apply="${i}:${j}">Apply</button><button class="btn" data-dismiss="${i}:${j}">Dismiss</button></span>`
     : `<span class="proposal-state">${a.state === "applied" ? "Applied" : a.state === "working" ? "Saving…" : a.state === "failed" ? "Couldn't save" : "Dismissed"}</span>`}</div>`).join("")}</div>`;
 }
+function askUnavailable() {
+  const why = S.askBlock === "sampling_disabled" ? "Claude's Ask feature isn't turned on for this Claude account, so the companion can't answer here. Everything else on the dashboard still works."
+    : S.askBlock === "not_granted" || S.samplePerm === "denied" ? "Ask was declined for this page, so it can't use your Claude account. Tap <b>Check permissions</b> and turn Ask (Claude) back on, then reload."
+    : "Ask isn't available in this view of the page. Open the dashboard link in the Claude app or at claude.ai in a web browser. A home-screen shortcut can open a stripped-down copy. If it's still unavailable there, this Claude account may not have the feature yet. Everything else on the dashboard still works.";
+  return `<section class="panel"><h2>Ask about your money</h2><p class="intro">${why}</p>${S.perms ? `<div><button class="btn" id="permsBtn">Check permissions</button></div>` : ""}</section>`;
+}
 function viewAsk() {
-  if (S.sample === null) return `<section class="panel"><h2>Ask about your money</h2><p class="empty">The companion only works when this page is open on claude.ai while you're signed in.</p></section>`;
+  if (S.sample === null || S.askBlock) return askUnavailable();
   const msgs = S.chat.map((m, i) => `<div class="msg ${m.role}">${m.role === "user" ? esc(m.content) : m.content ? md(m.content) : `<span class="thinking">Thinking…</span>`}${m.error ? `<p class="msg-err">${esc(m.error)}</p>` : ""}${actionsHtml(m, i)}</div>`).join("");
   return `<section class="panel ask">
     <div class="panel-head"><h2>Ask about your money</h2><p>Answers use the numbers on this dashboard${S.chat.length ? ` · <button class="btn link" id="chatClear">Clear</button>` : ""}</p></div>
@@ -684,6 +691,7 @@ async function ask(question) {
     if (truncated) reply.error = "The answer was cut short. Ask for less at a time.";
   } catch (e) {
     reply.content = e?.text || "";
+    if (e?.code === "not_granted" || e?.code === "sampling_disabled") S.askBlock = e.code;
     if (e?.code !== "cancelled") reply.error = AI_ERRORS[e?.code] || "Couldn't reach Claude. Check your connection and try again.";
     if (e?.code === "cancelled" && !reply.content) reply.error = "Stopped.";
   } finally {
@@ -744,6 +752,11 @@ app.addEventListener("click", e => {
   }
   const sug = e.target.closest("[data-suggest]"); if (sug) { ask(sug.dataset.suggest); return; }
   if (e.target.id === "askStop") { S.asking?.abort(); return; }
+  if (e.target.id === "permsBtn") {
+    S.perms?.manage?.().then(async () => { S.samplePerm = await S.perms.state("sample").catch(() => null); toast(S.samplePerm === "granted" || S.samplePerm === "prompt" ? "Ask is allowed now. Reload the page." : "Ask is still off for this page."); })
+      .catch(() => toast("Open the page's Permissions menu from the artifact's menu and turn Ask (Claude) on."));
+    return;
+  }
   if (e.target.id === "chatClear") { S.chat = []; render(true); return; }
   const go = e.target.closest("[data-goto]"); if (go) { S.tab = go.dataset.goto; render(true); return; }
   const m = e.target.closest("[data-month]"); if (m && S.tab === "where") { S.whereMonth = m.dataset.month; render(true); return; }
@@ -827,8 +840,10 @@ document.addEventListener("pointermove", e => {
 /* ---------- data ---------- */
 async function start() {
   render(true);
+  window.claude?.use?.("permissions").then(p => { S.perms = p || null; }).catch(() => {});
   window.claude?.use?.("sample").then(async fn => {
     S.sample = fn;
+    if (!fn) S.samplePerm = await S.perms?.state?.("sample").catch(() => null) ?? null;
     if (fn) S.sampleTools = !!(await fn.limits().catch(() => null))?.tools;
     if (S.tab === "ask") render();
   });
