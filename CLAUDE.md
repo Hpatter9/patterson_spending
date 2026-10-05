@@ -32,6 +32,8 @@ Household and business budget tracker for the Patterson family. Several Claude s
 
 **Account types:** checking, savings, credit, loan, investment, and hidden (duplicates or $0 policies, set in `rules.json` → `account_types`).
 
+**Account names:** `rules.json` → `account_names` overrides the names the bank sends, by dashboard id. Example: Chase sends the Ink cards as "H. PATTERSON". The Chase Ink cards are Hunter's and belong on the personal side, not Get In Tune.
+
 **Two sides, picked from the title dropdown** (`SPACES` in `dashboard/index.html`; the choice is remembered per browser):
 - **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Ask.
 - **Get In Tune** (her music therapy practice, getintunemusictherapy.com): Overview, Invoices, Mileage, Taxes, Setup, Ask. It has its own brand tokens under `body[data-space="biz"]`, taken from her site: indigo #352c73/#4a439e, violet #a12db5, Oswald headings and Assistant text. Her services are the default service lines in `BIZ_DEFAULTS`. Her logo (from static.wixstatic.com, trimmed to 314×112) is embedded in the header as a WebP data URI (`#bizLogo`), on a light background in dark mode.

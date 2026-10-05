@@ -83,6 +83,13 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(account_type("monaay", institution="Bank of America", descriptions=["Interest Charge"]), "credit")
         self.assertEqual(account_type("monaay", institution="Bank of America", descriptions=["Interest Income"]), "checking")
 
+    def test_account_name_override(self):
+        acct = next(a for a in run()["accounts"] if a["type"] == "loan")
+        rules = load_rules()
+        rules["account_names"] = {acct["id"]: "Car loan", "ACT-card-1": "Visa (Hunter)"}
+        names = sorted(a["name"] for a in normalize(json.loads(FIXTURE.read_text()), rules, now=NOW)["accounts"])
+        self.assertEqual(names, ["Car loan", "Everyday Checking", "Visa (Hunter)"])
+
     def test_hidden_accounts_are_dropped(self):
         raw = json.loads(FIXTURE.read_text())
         loan_id = next(a for a in run()["accounts"] if a["type"] == "loan")["id"]

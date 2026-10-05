@@ -66,6 +66,7 @@ def normalize(raw, rules, now=None, business_rules=None, business_accounts=()):
     now = now or datetime.now(timezone.utc)
     business_accounts = set(business_accounts)
     type_overrides = rules.get("account_types", {})
+    name_overrides = rules.get("account_names", {})  # dashboard id (a_...) or SimpleFIN id -> friendly name
     accounts, transactions = [], []
 
     for acct in raw.get("accounts", []):
@@ -87,7 +88,8 @@ def normalize(raw, rules, now=None, business_rules=None, business_accounts=()):
             balance = -abs(balance)
         accounts.append({
             "id": acct_id,
-            "name": re.sub(r"\s*\(?\.*\d{4}\)?\s*$", "", acct.get("name", "")).strip() or acct.get("name", ""),
+            "name": name_overrides.get(acct_id) or name_overrides.get(acct["id"])
+                    or re.sub(r"\s*\(?\.*\d{4}\)?\s*$", "", acct.get("name", "")).strip() or acct.get("name", ""),
             "institution": institution,
             "last4": last4(acct.get("name")),
             "type": kind,
