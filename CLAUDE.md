@@ -21,12 +21,13 @@ Household and business budget tracker for the Patterson family. Several Claude s
 
 **Ask answer queue.** Viewers whose account can't run live Ask (her free account) get a send-a-question box. The routine "Patterson Spending: answer Ask questions" (`trig_01KMWWxzE85d8cXu7dxwXJzw`) runs hourly from 7am to 10pm Mountain in the same runner session, on the owner's account, and follows `ASK_QUEUE.md`.
 - `sync/` pulls from SimpleFIN (`SIMPLEFIN_ACCESS_URL` is set in the environment settings) and categorizes with `sync/rules.json` for household accounts and `sync/business_rules.json` for business accounts.
+- When an account is marked business after its transactions synced, `plan_writes --business-accounts` swaps their household categories for business ones on the next sync (categories she picked by hand, `categoryLocked`, never change). `BUSINESS_CATEGORIES` in `sync/categorize.py` must match the dashboard's lists; a test checks this.
 - `sync/plan_writes.py` turns `out/sync.json` into database batches. The database refuses changes to an existing row unless the write names the row's version, so new rows are sent as-is and changed rows go in a second pass with their versions.
 
 **Dashboard database collections:**
 - `accounts`: synced accounts. Ids starting `m_` were added by hand, and the sync never touches them. Business accounts carry `business: true`.
 - `transactions`, `balances/{date}`, `meta/sync`: written by the sync.
-- `budgets`, `bills`, `rules`: edited on the page. A `rules` doc with `scope: "business"` is a business merchant rule.
+- `budgets`, `bills`, `rules`: edited on the page. A `rules` doc with `scope: "business"` is a business merchant rule. Picking a business category also moves her other not-yet-picked charges from the same merchant.
 - `invoices`, `mileage`, `taxPayments`, `meta/business`: Business tab.
 - `questions`: the Ask answer queue (see `ASK_QUEUE.md`).
 

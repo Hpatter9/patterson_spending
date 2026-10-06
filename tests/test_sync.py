@@ -141,6 +141,24 @@ class BusinessTest(unittest.TestCase):
         self.assertEqual(cats[("4444", "SPOTIFY USA")], "Subscriptions")
 
 
+class DashboardCategoriesTest(unittest.TestCase):
+    def test_business_categories_match_dashboard(self):
+        import re
+        from sync.categorize import BUSINESS_CATEGORIES
+        html = (Path(__file__).parent.parent / "dashboard" / "index.html").read_text()
+        lists = {name: re.findall(r'"([^"]+)"', re.search(rf"const {name} = \[(.*?)\];", html).group(1))
+                 for name in ("BIZ_INCOME", "BIZ_EXPENSE")}
+        extra = re.findall(r'"([^"]+)"', re.search(r"const BIZ_CATEGORIES = \[\.\.\.BIZ_INCOME, \.\.\.BIZ_EXPENSE, (.*?)\];", html).group(1))
+        self.assertEqual(set(BUSINESS_CATEGORIES), set(lists["BIZ_INCOME"] + lists["BIZ_EXPENSE"] + extra))
+
+    def test_business_rules_use_business_categories(self):
+        from sync.categorize import BUSINESS_CATEGORIES
+        rules = json.loads(BUSINESS_RULES.read_text())
+        for merchant, cat in rules["merchants"].items():
+            self.assertIn(cat, BUSINESS_CATEGORIES, merchant)
+        self.assertIn(rules["income_category"], BUSINESS_CATEGORIES)
+
+
 class ClientTest(unittest.TestCase):
     def test_credentials_split_from_url(self):
         base, auth = _split_credentials("https://user:p%40ss@bridge.example/simplefin/")

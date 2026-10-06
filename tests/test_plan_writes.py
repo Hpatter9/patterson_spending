@@ -74,6 +74,33 @@ class PlanTest(unittest.TestCase):
         _, pinned = plan(sync, db)
         self.assertEqual(next(w for w in pinned if w["doc_id"] == t["id"])["data"], {"category": "Shopping"})
 
+    def test_marked_business_replaces_household_category(self):
+        sync = fresh_sync()
+        db = stored(sync)
+        biz = sync["accounts"][1]["id"]  # the card: synced earlier with household categories
+        txns = [t for t in sync["transactions"] if t["accountId"] == biz]
+        for t in txns:
+            t["category"] = "Travel & Meals"  # what the business rules give this run
+        locked = txns[0]["id"]
+        db["transactions"][locked].update(category="Dining", categoryLocked=True)
+        _, pinned = plan(sync, db, business_accounts=[biz])
+        changed = {w["doc_id"]: w["data"].get("category") for w in pinned if w["collection"] == "transactions"}
+        self.assertNotIn(locked, changed)  # her own pick always wins
+        for t in txns[1:]:
+            self.assertEqual(changed[t["id"]], "Travel & Meals")
+        _, pinned = plan(sync, db)  # not marked business: household categories stay
+        self.assertFalse(any(w["collection"] == "transactions" and "category" in w["data"] for w in pinned))
+
+    def test_business_category_is_not_replaced(self):
+        sync = fresh_sync()
+        db = stored(sync)
+        biz = sync["accounts"][1]["id"]
+        t = next(t for t in sync["transactions"] if t["accountId"] == biz)
+        db["transactions"][t["id"]]["category"] = "Office Supplies"  # already a business category
+        t["category"] = "Uncategorized"
+        _, pinned = plan(sync, db, business_accounts=[biz])
+        self.assertFalse(any(w["doc_id"] == t["id"] and "category" in w["data"] for w in pinned))
+
     def test_stale_pending_is_deleted(self):
         sync = fresh_sync()
         db = stored(sync)

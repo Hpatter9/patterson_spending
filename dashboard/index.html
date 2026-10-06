@@ -1377,10 +1377,13 @@ app.addEventListener("change", e => {
   if (t.dataset.bizcat !== undefined && t.value) {
     const txn = S.bizTxns.find(x => x.id === t.dataset.bizcat), cat = t.value, key = merchantKey(txn);
     const learn = key.length >= 3 && cat !== "Uncategorized" && cat !== "Transfer";
+    // Her pick also sorts the other charges from this merchant she hasn't picked by hand yet.
+    const same = learn ? S.bizTxns.filter(x => x.id !== txn?.id && !x.categoryLocked && x.category !== cat && merchantKey(x) === key).slice(0, 100) : [];
     write(async db => {
       await db.doc(`transactions/${t.dataset.bizcat}`).update({ category: cat, categoryLocked: true });
       if (learn) await db.doc(`rules/biz-${slug(key)}`).set({ merchant: key, category: cat, scope: "business" });
-    }, learn ? `Saved. Future “${key}” business charges go to ${cat}.` : "Category saved");
+      for (const x of same) await db.doc(`transactions/${x.id}`).update({ category: cat });
+    }, !learn ? "Category saved" : same.length ? `Saved. ${plural(same.length, "other “" + key + "” charge")} and future ones go to ${cat}.` : `Saved. Future “${key}” business charges go to ${cat}.`);
   }
   if (t.dataset.line) write(db => db.doc(`transactions/${t.dataset.line}`).update({ serviceLine: t.value }), "Service saved");
   if (t.dataset.bizacct) write(db => db.doc(`accounts/${t.dataset.bizacct}`).update({ business: t.checked }), t.checked ? "Marked as business" : "Moved back to household");

@@ -10,6 +10,14 @@ TRANSFER = "Transfer"
 INCOME = "Income"
 OWNER_DRAW = "Owner Draw"
 OWNER_CONTRIBUTION = "Owner Contribution"
+# Must match BIZ_INCOME, BIZ_EXPENSE and BIZ_CATEGORIES in dashboard/index.html.
+BUSINESS_CATEGORIES = (
+    "Contract Income", "Private Pay", "Groups & Workshops", "Training & Supervision", "Program Sales", "Other Income",
+    "Instruments & Equipment", "Music & Licensing", "Therapy Supplies", "Continuing Education", "Certification & Licensing",
+    "Memberships", "Liability Insurance", "Software & Apps", "Marketing & Website", "Rent & Space", "Contractors",
+    "Phone & Internet", "Travel & Meals", "Bank & Payment Fees", "Office Supplies", "Other Expense",
+    OWNER_DRAW, OWNER_CONTRIBUTION, "Tax Payment", TRANSFER, UNCATEGORIZED,
+)
 
 
 def load_rules(path=DEFAULT_RULES, overrides=None):

@@ -21,7 +21,7 @@ import json
 import sys
 from pathlib import Path
 
-from .categorize import UNCATEGORIZED
+from .categorize import BUSINESS_CATEGORIES, UNCATEGORIZED
 
 BATCH_SIZE = 50
 TXN_SYNCED = ("accountId", "date", "amount", "payee", "description", "pending")
@@ -36,8 +36,13 @@ def load_existing(root):
     return existing
 
 
-def plan(sync, existing):
-    """Return (unpinned, pinned) lists of write dicts without file paths or versions."""
+def plan(sync, existing, business_accounts=()):
+    """Return (unpinned, pinned) lists of write dicts without file paths or versions.
+
+    business_accounts: ids of accounts marked business on the dashboard. Their transactions
+    that still carry a household category (synced before the account was marked) take the
+    business category from this sync."""
+    business_accounts = set(business_accounts)
     unpinned, pinned = [], []
 
     for acct in sync["accounts"]:
@@ -57,9 +62,13 @@ def plan(sync, existing):
             unpinned.append(dict(op="set", collection="transactions", doc_id=txn["id"], data=data))
             continue
         data = {k: txn.get(k) for k in TXN_SYNCED if old.get(k) != txn.get(k)}
-        # A category chosen on the dashboard always wins; otherwise only fill in blanks.
-        if not old.get("categoryLocked") and old.get("category") == UNCATEGORIZED and txn["category"] != UNCATEGORIZED:
-            data["category"] = txn["category"]
+        # A category chosen on the dashboard always wins; otherwise only fill in blanks,
+        # or replace a household category on an account that has since been marked business.
+        if not old.get("categoryLocked") and old.get("category") != txn["category"]:
+            blank = old.get("category") == UNCATEGORIZED and txn["category"] != UNCATEGORIZED
+            wrong_kind = txn["accountId"] in business_accounts and old.get("category") not in BUSINESS_CATEGORIES
+            if blank or wrong_kind:
+                data["category"] = txn["category"]
         if data:
             pinned.append(dict(op="update", collection="transactions", doc_id=txn["id"], data=data))
 
@@ -109,10 +118,12 @@ def main(argv=None):
     p.add_argument("--sync", default="out/sync.json")
     p.add_argument("--existing", required=True, help="ArtifactData out_dir export of the dashboard database")
     p.add_argument("--versions", help='JSON {"collection/doc_id": version} for the pinned writes')
+    p.add_argument("--business-accounts", help="JSON list of account ids marked business on the dashboard")
     p.add_argument("--out", default="out/batches")
     args = p.parse_args(argv)
 
-    unpinned, pinned = plan(json.loads(Path(args.sync).read_text()), load_existing(args.existing))
+    business = json.loads(Path(args.business_accounts).read_text()) if args.business_accounts else []
+    unpinned, pinned = plan(json.loads(Path(args.sync).read_text()), load_existing(args.existing), business)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     for old in out.glob("*.json"):
