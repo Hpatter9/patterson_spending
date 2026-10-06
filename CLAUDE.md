@@ -17,7 +17,7 @@ Household and business budget tracker for the Patterson family. Several Claude s
 - Store client names or health details for the business. Use client codes or initials only.
 
 ## Current state
-**Bank sync.** The routine "Patterson Spending daily sync" (`trig_01V6M5B6nfb3KVZThyC58i7n`) runs at 5:49am America/Denver in the sync runner session. It follows `ROUTINE.md`, so change the steps there, not in the trigger.
+**Bank sync.** The routine "Patterson Spending daily sync" (`trig_01V6M5B6nfb3KVZThyC58i7n`) runs at 5:49am America/Denver in the sync runner session. It follows `ROUTINE.md`, so change the steps there, not in the trigger. If every account at one bank has a `balanceDate` 2+ days old, the bank connection in SimpleFIN has stalled (Chase does this). The dashboard shows a warning (`staleBanks()`), and the morning sync sends a notification.
 
 **Ask answer queue.** Viewers whose account can't run live Ask (her free account) get a send-a-question box. The routine "Patterson Spending: answer Ask questions" (`trig_01KMWWxzE85d8cXu7dxwXJzw`) runs hourly from 7am to 10pm Mountain in the same runner session, on the owner's account, and follows `ASK_QUEUE.md`.
 - `sync/` pulls from SimpleFIN (`SIMPLEFIN_ACCESS_URL` is set in the environment settings) and categorizes with `sync/rules.json` for household accounts and `sync/business_rules.json` for business accounts.

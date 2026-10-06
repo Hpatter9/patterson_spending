@@ -84,6 +84,7 @@ nav.tabs button:hover { color: var(--ink); }
 
 main.wrap { padding-block: 20px 48px; display: grid; gap: 20px; }
 .notice { padding: 12px 14px; border-radius: var(--r); background: var(--accent-soft); color: var(--ink); font-size: .9rem; }
+.notice.warn-notice { background: color-mix(in srgb, var(--warn-fill) 18%, var(--surface)); }
 .notice.crit { background: color-mix(in srgb, var(--crit) 14%, var(--surface)); }
 
 .figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
@@ -304,6 +305,16 @@ function catMath(rows) {
     if (t.pending) { m.pending += Math.abs(t.amount); m.nPending++; }
   }
   return m;
+}
+// Banks whose synced accounts all have an old balance date: the bank connection has stalled.
+function staleBanks() {
+  const by = new Map();
+  for (const a of S.accounts) if (!a.manual && !a.demo && a.balanceDate) {
+    const b = by.get(a.institution) || { name: a.institution, since: a.balanceDate };
+    if (a.balanceDate > b.since) b.since = a.balanceDate;
+    by.set(a.institution, b);
+  }
+  return [...by.values()].filter(b => daysBetween(b.since, todayKey) >= 2).sort((x, y) => x.since < y.since ? -1 : 1);
 }
 function spendByCat(month) {
   const m = new Map();
@@ -1247,6 +1258,7 @@ function render(force) {
   renderChip();
   let notice = "";
   if (S.error) notice = `<div class="notice crit">${esc(S.error)}</div>`;
+  else if (staleBanks().length) notice = `<div class="notice warn-notice"><b>${esc(staleBanks().map(b => b.name).join(" and "))} ${staleBanks().length > 1 ? "haven't" : "hasn't"} sent new data since ${esc(fmtDay(staleBanks()[0].since))}.</b> Recent purchases there won't show up yet. Open SimpleFIN Bridge (beta-bridge.simplefin.org), go to its connections, and reconnect ${staleBanks().length > 1 ? "them" : "it"}. Usually that means re-entering the login or approving a code. The next morning's sync catches up.</div>`;
   else if (S.accounts.some(a => a.demo)) notice = `<div class="notice">These are <b>example numbers</b> so you can try the layout. Your real accounts replace them after the first bank sync.</div>`;
   if (!S.db && !S.error) { app.innerHTML = notice + `<div class="empty">Sign in to claude.ai to see the household numbers.</div>`; return; }
   if (!S.ready.accounts || !S.ready.txns) { app.innerHTML = `<div class="empty">Loading your household numbers…</div>`; return; }

@@ -26,5 +26,6 @@ Sync the Patterson Spending dashboard at https://claude.ai/artifact/8Aq4chNUNzxC
    - a business invoice with no `paidDate` is 30 or more days past its `due` date (or `issued` + 30 days when `due` is empty). Use the client code, never more.
    - a quarterly estimated tax payment is due within 7 days (Apr 15, Jun 15, Sep 15, Jan 15) and no `taxPayments` doc or business `Tax Payment` transaction for that quarter exists this year
    - `out/sync.json` lists SimpleFIN errors, such as a bank that needs to be reconnected
+   - a bank has stopped updating: every account from one institution in `out/sync.json` has a `balanceDate` 2 or more days old. Name the bank and say to reconnect it in SimpleFIN Bridge. Send this at most once per bank per day.
 
    Otherwise stay silent.
