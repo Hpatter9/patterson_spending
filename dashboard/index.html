@@ -274,7 +274,7 @@ const NOT_SPENDING = new Set(["Income","Transfer"]);
 // txns = household only; allTxns = every account (last 7 months); bizTxns = business accounts since January 1.
 const SPACES = {
   home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["fun", "Fun Facts"], ["ask", "Ask"]] },
-  biz: { title: "Get In Tune", sub: "Therapy & coaching for life's big changes", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["ask", "Ask"]] },
+  biz: { title: "Get In Tune", sub: "Therapy & coaching for life's big changes", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["biz:fun", "Fun Facts"], ["ask", "Ask"]] },
 };
 const S = { space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
   invoices: [], mileage: [], taxPayments: [], bizMeta: null, bizSub: "overview", bizSearch: "", bizTodo: false,
@@ -351,6 +351,7 @@ function spendByCat(month) {
 }
 const total = m => [...m.values()].reduce((a, b) => a + b, 0);
 const incomeFor = month => S.txns.filter(t => t.date?.startsWith(month) && t.category === "Income").reduce((a, t) => a + t.amount, 0);
+const homeAccts = () => S.accounts.filter(a => !a.business); // Get In Tune's accounts stay on her side
 const isAsset = a => a.type === "checking" || a.type === "savings";
 const isLiability = a => a.type === "credit" || a.type === "loan";
 function nextDue(bill) {
@@ -423,11 +424,12 @@ function lineChart(points) {
 
 /* ---------- views ---------- */
 function viewMonth() {
+  const H = homeAccts();
   const spent = spendByCat(thisMonth), spentTotal = total(spent);
   const budgets = new Map(S.budgets.map(b => [b.category, b]));
   const budgetTotal = S.budgets.reduce((a, b) => a + (+b.limit || 0), 0);
   const income = incomeFor(thisMonth), daysLeft = daysInMonth - today.getDate();
-  const netWorth = S.accounts.reduce((a, x) => a + (+x.balance || 0), 0);
+  const netWorth = H.reduce((a, x) => a + (+x.balance || 0), 0);
   const upcoming = S.bills.filter(b => b.paidMonth !== thisMonth).map(b => ({ b, n: nextDue(b) })).sort((a, b) => a.n.date - b.n.date)[0];
   const left = budgetTotal - spentTotal;
 
@@ -460,15 +462,19 @@ function viewMonth() {
       ${rows || `<p class="empty">No spending yet this month.${S.canWrite ? " Spending categories appear here as transactions sync." : ""}</p>`}
     </section>
     <section class="panel">
-      <div class="panel-head"><h2>Net worth</h2><p>${S.accounts.length} account${S.accounts.length === 1 ? "" : "s"}</p></div>
-      <div class="fig" style="border:0;padding:0"><div class="value">${usd0.format(netWorth)}</div><div class="sub">${usd0.format(S.accounts.filter(isAsset).reduce((a, x) => a + x.balance, 0))} cash · ${S.accounts.some(a => a.type === "investment") ? usd0.format(S.accounts.filter(a => a.type === "investment").reduce((a, x) => a + x.balance, 0)) + " invested · " : ""}${usd0.format(-S.accounts.filter(isLiability).reduce((a, x) => a + x.balance, 0))} owed</div></div>
+      <div class="panel-head"><h2>Net worth</h2><p>${H.length} account${H.length === 1 ? "" : "s"}</p></div>
+      <div class="fig" style="border:0;padding:0"><div class="value">${usd0.format(netWorth)}</div><div class="sub">${usd0.format(H.filter(isAsset).reduce((a, x) => a + x.balance, 0))} cash · ${H.some(a => a.type === "investment") ? usd0.format(H.filter(a => a.type === "investment").reduce((a, x) => a + x.balance, 0)) + " invested · " : ""}${usd0.format(-H.filter(isLiability).reduce((a, x) => a + x.balance, 0))} owed</div></div>
       ${lineChart(netWorthSeries())}
       <button class="btn" data-goto="worth">See accounts and debts</button>
     </section>
   </div>`;
 }
 
-function netWorthSeries() { return [...S.balances].sort((a, b) => a.date < b.date ? -1 : 1).map(b => ({ d: b.date, v: +b.netWorth || 0 })); }
+function netWorthSeries() { // household only: each snapshot's per-account balances minus Get In Tune's accounts
+  const biz = new Set(bizIds());
+  return [...S.balances].sort((a, b) => a.date < b.date ? -1 : 1).map(b => ({ d: b.date,
+    v: b.balances ? Object.entries(b.balances).reduce((s, [id, v]) => biz.has(id) ? s : s + (+v || 0), 0) : +b.netWorth || 0 }));
+}
 
 function viewWhere() {
   const months = lastMonths(6), month = S.whereMonth || thisMonth;
@@ -528,6 +534,64 @@ function payoff(balance, aprPct, payment) {
   const n = Math.ceil(-Math.log(1 - (r * B) / P) / Math.log(1 + r));
   return { months: n, interest: Math.max(0, P * n - B) };
 }
+// Card terms SimpleFIN doesn't send, estimated from history. Payment day comes from when payments post,
+// and the APR comes from an interest charge over that card's average balance in the daily snapshots before it.
+const CARD_PAY = /PAYMENT|AUTOPAY|AUTO PAY|THANK YOU|PYMT/i;
+const CARD_INT = /INTEREST CHARGE|PURCHASE INTEREST|INTEREST CHG|FINANCE CHARGE/i;
+function cardTerms(a) {
+  const rows = S.allTxns.filter(t => t.accountId === a.id && t.date), text = t => `${t.payee || ""} ${t.description || ""}`;
+  const pays = rows.filter(t => t.amount > 0 && CARD_PAY.test(text(t))).sort((x, y) => x.date < y.date ? 1 : -1);
+  const ints = rows.filter(t => t.amount < 0 && CARD_INT.test(text(t))).sort((x, y) => x.date < y.date ? 1 : -1);
+  const days = new Map(); for (const p of pays) { const d = +p.date.slice(8); days.set(d, (days.get(d) || 0) + 1); }
+  const top = [...days].sort((x, y) => y[1] - x[1])[0];
+  const dueDay = top ? (top[1] > 1 ? top[0] : +pays[0].date.slice(8)) : null;
+  let apr = null; const last = ints[0];
+  if (last) {
+    const from = addDays(last.date, -31), pts = S.balances.filter(b => b.date >= from && b.date < last.date && b.balances?.[a.id] != null).map(b => Math.abs(b.balances[a.id]));
+    const avg = pts.length >= 5 ? pts.reduce((s, v) => s + v, 0) / pts.length : 0;
+    const est = avg > 50 ? -last.amount / avg * 365 / 30 * 100 : 0;
+    if (est >= 3 && est <= 40) apr = Math.round(est * 10) / 10;
+  }
+  return { dueDay, lastPay: pays[0] || null, interest: last || null, nInterest: ints.length, apr, months: new Set(rows.map(t => t.date.slice(0, 7))).size };
+}
+function cardNote(a, ct) {
+  const bits = [];
+  if (ct.interest) bits.push(`Interest ${usd.format(-ct.interest.amount)} on ${fmtDay(ct.interest.date)}${ct.apr != null ? ` · about ${ct.apr}% APR from that` : ""}`);
+  else if (ct.months >= 2) bits.push(`No interest in ${ct.months} months 👍`);
+  if (ct.dueDay && !a.dueDay) bits.push(`payments usually post around the ${ordinal(ct.dueDay)}`);
+  return bits.length ? `<div class="row-note">${bits.join(" · ")}</div>` : "";
+}
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+// Fills only empty fields; anything typed in by hand stays.
+function cardFills() {
+  return homeAccts().filter(a => a.type === "credit").map(a => { const ct = cardTerms(a), patch = {};
+    if (a.dueDay == null && ct.dueDay) patch.dueDay = ct.dueDay;
+    if (a.apr == null && ct.apr != null) patch.apr = ct.apr;
+    return { a, patch }; }).filter(x => Object.keys(x.patch).length);
+}
+function cardDue(a) { // the card's next due date (today counts), and a payment that posted in the 4 weeks before it
+  const now = nextDue({ dueDay: a.dueDay, paidMonth: null }), due = now.overdue ? nextDue({ dueDay: a.dueDay, paidMonth: thisMonth }) : now;
+  const dueKey = `${due.date.getFullYear()}-${pad(due.date.getMonth() + 1)}-${pad(due.date.getDate())}`;
+  const paid = S.allTxns.find(t => t.accountId === a.id && t.amount > 0 && CARD_PAY.test(`${t.payee || ""} ${t.description || ""}`) && t.date > addDays(dueKey, -28) && t.date <= todayKey);
+  return { ...due, paid };
+}
+function cardFillNotice() {
+  const fills = cardFills();
+  return S.canWrite && fills.length ? `<div class="notice">I can fill in due days and APRs for ${plural(fills.length, "card")} from your history: due days from when payments post, APR from interest charges. They're estimates, so check them against a statement and fix any below. <button class="btn primary" data-card-fill>Fill in estimates</button></div>` : "";
+}
+function cardBillsPanel() {
+  const cards = homeAccts().filter(a => a.type === "credit"), set = cards.filter(a => a.dueDay).map(a => ({ a, d: cardDue(a) })).sort((x, y) => x.d.date - y.d.date);
+  return `<section class="panel">
+    <div class="panel-head"><h2>Credit cards</h2><p>${set.length} of ${cards.length} with a due day · amounts are today's balances</p></div>
+    ${set.map(({ a, d }) => { const owed = Math.max(0, -(+a.balance || 0));
+      return `<div class="bill ${d.paid || !owed ? "paid" : ""}">
+      <div class="date"><span>${d.date.toLocaleDateString("en-US", { month: "short" })}</span><b>${d.date.getDate()}</b></div>
+      <div><div class="payee">${esc(a.name)}${a.last4 ? ` <small style="display:inline">·${esc(a.last4)}</small>` : ""}</div><div class="meta" style="color:var(--muted);font-size:.85rem">${!owed ? "Nothing owed" : d.paid ? `Payment posted ${fmtDay(d.paid.date)}` : dueText(d)}${a.apr != null ? ` · ${esc(a.apr)}% APR` : ""}</div></div>
+      <div class="right"><b>${usd.format(owed)}</b></div></div>`; }).join("") || `<p class="empty">No card due days yet.</p>`}
+    ${cardFillNotice()}
+    <p class="privacy">Set or change a card's due day and APR on Net Worth &amp; Debt. Banks don't share these through the sync.</p>
+  </section>`;
+}
 function acctEdit(a, field, label, suffix = "") {
   const v = a[field] ?? "";
   return S.canWrite ? `<label>${label} <input type="number" step="any" min="0" inputmode="decimal" id="${field}-${esc(a.id)}" data-acct="${esc(a.id)}" data-field="${field}" value="${esc(v)}">${suffix}</label>` : (v !== "" ? `<span>${label} ${esc(v)}${suffix}</span>` : "");
@@ -553,18 +617,19 @@ function addAccountForm() {
     </form></details>`;
 }
 function viewWorth() {
+  const H = homeAccts(), bizAccts = S.accounts.filter(a => a.business);
   const byDebt = (a, b) => a.balance - b.balance;
-  const assets = S.accounts.filter(isAsset), invest = S.accounts.filter(a => a.type === "investment");
-  const cards = S.accounts.filter(a => a.type === "credit").sort(byDebt), loans = S.accounts.filter(a => a.type === "loan").sort(byDebt);
+  const assets = H.filter(isAsset), invest = H.filter(a => a.type === "investment");
+  const cards = H.filter(a => a.type === "credit").sort(byDebt), loans = H.filter(a => a.type === "loan").sort(byDebt);
   const sum = l => l.reduce((a, x) => a + (+x.balance || 0), 0);
-  const nw = sum(S.accounts), series = netWorthSeries();
+  const nw = sum(H), series = netWorthSeries();
   const first = series.find(p => p.d >= `${lastMonths(6)[0]}-01`) || series[0];
   const change = first ? nw - first.v : 0;
   const totalLimit = cards.reduce((a, c) => a + (+c.limit || 0), 0), util = totalLimit ? -sum(cards) / totalLimit : null;
   const head = (a, extra = "") => `<div><div class="payee">${esc(a.name)}</div><div class="meta">${esc(a.institution)}${a.last4 ? ` · ${esc(a.last4)}` : ""}${extra}${a.business ? ` · <span class="pill">Business</span>` : ""}</div></div><div class="bal">${usd.format(a.balance)}</div>`;
   const utilBar = r => `<div class="util"><b class="fill-${r > 0.5 ? "crit" : r > 0.3 ? "warn" : "good"}" style="width:${Math.min(100, r * 100)}%"></b></div>`;
   const cardHtml = cards.map(c => { const r = c.limit ? -c.balance / c.limit : null;
-    return `<div class="acct">${head(c, r != null ? ` · ${Math.round(r * 100)}% used` : "")}${r != null ? utilBar(r) : ""}<div class="edit">${acctEdit(c, "limit", "Limit $")}${acctEdit(c, "apr", "APR", "%")}</div>${manualRow(c)}</div>`; }).join("");
+    return `<div class="acct">${head(c, r != null ? ` · ${Math.round(r * 100)}% used` : "")}${r != null ? utilBar(r) : ""}<div class="edit">${acctEdit(c, "limit", "Limit $")}${acctEdit(c, "apr", "APR", "%")}${acctEdit(c, "dueDay", "Due day")}</div>${cardNote(c, cardTerms(c))}${manualRow(c)}</div>`; }).join("");
   const loanHtml = loans.map(l => { const p = payoff(l.balance, l.apr, l.payment);
     const txt = !p ? "Add APR and monthly payment to see a payoff date" : p.never ? "Payment doesn't cover interest" :
       `Paid off ${new Date(today.getFullYear(), today.getMonth() + p.months, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · ${usd0.format(p.interest)} interest left`;
@@ -580,8 +645,10 @@ function viewWorth() {
   <div class="cols">
     <section class="panel">
       <div class="panel-head"><h2>Accounts</h2><p>Debts shown as negative balances</p></div>
+      ${bizAccts.length ? `<p class="privacy">${plural(bizAccts.length, "Get In Tune account")} (${usd0.format(bizAccts.reduce((s, a) => s + (+a.balance || 0), 0))}) ${bizAccts.length === 1 ? "is left out here. It shows" : "are left out here. They show"} on the Get In Tune side.</p>` : ""}
+      ${cardFillNotice()}
       ${addAccountForm()}
-      ${S.accounts.length ? group("Cash", assets.map(a => `<div class="acct">${head(a, ` · ${a.type}`)}${manualRow(a)}</div>`).join(""), assets) + group("Investments", invest.map(a => `<div class="acct">${head(a)}${manualRow(a)}</div>`).join(""), invest) + group("Credit cards", cardHtml, cards) + group("Loans", loanHtml, loans) : `<p class="empty">No accounts yet. They appear after the first bank sync.</p>`}
+      ${H.length ? group("Cash", assets.map(a => `<div class="acct">${head(a, ` · ${a.type}`)}${manualRow(a)}</div>`).join(""), assets) + group("Investments", invest.map(a => `<div class="acct">${head(a)}${manualRow(a)}</div>`).join(""), invest) + group("Credit cards", cardHtml, cards) + group("Loans", loanHtml, loans) : `<p class="empty">No accounts yet. They appear after the first bank sync.</p>`}
     </section>
     <section class="panel">
       <div class="panel-head"><h2>Net worth over time</h2><p>One point per daily sync</p></div>
@@ -600,7 +667,7 @@ function viewBills() {
   const items = S.bills.map(b => ({ b, n: nextDue(b), paid: b.paidMonth === thisMonth })).sort((a, b) => (a.paid - b.paid) || (a.n.date - b.n.date));
   const unpaid = items.filter(i => !i.paid), dueSoon = unpaid.filter(i => i.n.overdue || i.n.days <= 7);
   const monthTotal = S.bills.reduce((a, b) => a + (+b.amount || 0), 0);
-  const acctOpts = S.accounts.filter(isLiability).map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.last4 ? " ·" + esc(a.last4) : ""}</option>`).join("");
+  const acctOpts = homeAccts().filter(isLiability).map(a => `<option value="${esc(a.id)}">${esc(a.name)}${a.last4 ? " ·" + esc(a.last4) : ""}</option>`).join("");
   return `
   <div class="figures">
     <div class="fig"><div class="label">Due in the next 7 days</div><div class="value">${usd0.format(dueSoon.reduce((a, i) => a + (+i.b.amount || 0), 0))}</div><div class="sub">${dueSoon.length} bill${dueSoon.length === 1 ? "" : "s"}</div></div>
@@ -613,8 +680,9 @@ function viewBills() {
       <div class="date"><span>${n.date.toLocaleDateString("en-US", { month: "short" })}</span><b>${n.date.getDate()}</b></div>
       <div><div class="payee">${esc(b.name)} ${b.autopay ? `<span class="pill">Autopay</span>` : ""}</div><div class="meta" style="color:var(--muted);font-size:.85rem">${paid ? "Paid this month" : dueText(n)}</div></div>
       <div class="right"><b>${usd.format(+b.amount || 0)}</b>${S.canWrite ? `<span><label><input type="checkbox" id="paid-${esc(b.id)}" data-paid="${esc(b.id)}" ${paid ? "checked" : ""}> Paid</label><button class="btn link" data-del="${esc(b.id)}" aria-label="Remove ${esc(b.name)}">Remove</button></span>` : ""}</div>
-    </div>`).join("") : `<p class="empty">No bills yet. Add your card and loan due dates below so nothing slips.</p>`}
+    </div>`).join("") : `<p class="empty">No bills yet. Add loans and other due dates below so nothing slips. Credit cards are listed below on their own.</p>`}
   </section>
+  ${cardBillsPanel()}
   ${S.canWrite ? `<section class="panel">
     <h2>Add a bill</h2>
     <form class="add" id="billForm">
@@ -860,9 +928,78 @@ function viewFun() {
   </section>`;
 }
 
+// Get In Tune fun facts: same idea as the household tab, from her invoices, mileage and business accounts.
+const EARTH_MILES = 24901, UKULELE = 80;
+function bizMonths() { return lastMonths(today.getMonth() + 1); } // January through this month
+function bizFunFacts() {
+  const facts = [], add = (icon, big, text) => facts.push({ icon, big, text, attrs: "" });
+  const ytd = pnl(yearStart, todayKey), months = bizMonths().map(m => ({ m, p: pnl(`${m}-01`, `${m}-31`) }));
+  if (ytd.income > 0) add("🎸", `${Math.floor(ytd.income / UKULELE).toLocaleString()} ukuleles`, `This year's income, ${usd0.format(ytd.income)}, in $${UKULELE} ukuleles. A whole music room's worth.`);
+  const best = months.filter(x => x.p.income > 0).sort((a, b) => b.p.net - a.p.net)[0];
+  if (best) add("🏅", monthName(best.m).split(" ")[0], `Best month of ${year} so far: ${usd0.format(best.p.net)} profit on ${usd0.format(best.p.income)} coming in.`);
+  if (ytd.income > 0) add("💜", `${Math.round(Math.max(0, ytd.net) / ytd.income * 100)}¢`, `Kept from every $1 earned this year, after expenses and mileage.`);
+  const sent = S.invoices.filter(i => (i.issued || "") >= yearStart);
+  if (sent.length) add("🧾", plural(sent.length, "invoice"), `Sent in ${year}, adding up to ${usd0.format(sumBy(sent, i => i.amount))}.`);
+  const paid = S.invoices.filter(i => i.paidDate && i.issued && i.paidDate >= yearStart);
+  if (paid.length >= 2) {
+    const avg = paid.reduce((s, i) => s + Math.max(0, daysBetween(i.issued, i.paidDate)), 0) / paid.length;
+    add("⏱️", `${Math.round(avg)} days`, `Average time from sending an invoice to getting paid this year.`);
+    const by = new Map(); for (const i of paid) { const k = i.client || "?"; const v = by.get(k) || { n: 0, d: 0 }; v.n++; v.d += Math.max(0, daysBetween(i.issued, i.paidDate)); by.set(k, v); }
+    const fast = [...by].filter(([, v]) => v.n >= 2).sort((a, b) => a[1].d / a[1].n - b[1].d / b[1].n)[0];
+    if (fast) add("⚡", fast[0], `Quickest to pay: ${Math.round(fast[1].d / fast[1].n)} days on average over ${plural(fast[1].n, "invoice")}.`);
+  }
+  const trips = S.mileage.filter(m => (m.date || "") >= yearStart), miles = sumBy(trips, m => m.miles);
+  if (miles > 0) {
+    add("🌎", `${(miles / EARTH_MILES * 100).toFixed(1)}%`, `Of the way around the Earth: ${Math.round(miles).toLocaleString()} business miles this year.`);
+    if (ytd.mileage) add("🚗", usd0.format(ytd.mileage), `What those miles are worth as a tax deduction at ${usd.format(+biz().mileageRate || 0)} a mile.`);
+    const wd = Array(7).fill(0); for (const m of trips) wd[dayOfWeek(m.date)] += +m.miles || 0;
+    if (trips.length >= 5) add("📅", WEEKDAYS[wd.indexOf(Math.max(...wd))], `Your biggest driving day of the week, ${Math.round(Math.max(...wd) / miles * 100)}% of the miles.`);
+  }
+  const cat = [...ytd.byCat].filter(([k]) => k !== "Mileage").sort((a, b) => b[1] - a[1])[0];
+  if (cat) add("🛒", cat[0], `Biggest business expense this year: ${usd0.format(cat[1])}.`);
+  const line = [...ytd.byLine].filter(([, v]) => v.income > 0).sort((a, b) => b[1].income - a[1].income)[0];
+  if (line && ytd.byLine.size > 1) add("🎵", line[0], `Top-earning service line: ${usd0.format(line[1].income)} this year.`);
+  return facts;
+}
+function bizFunBadges() {
+  const mon = pnl(`${thisMonth}-01`, todayKey), open = S.invoices.filter(i => !i.paidDate), late = open.filter(i => agingOf(i) > 0);
+  const issued = S.invoices.filter(i => (i.issued || "").startsWith(thisMonth)), quick = S.invoices.filter(i => (i.paidDate || "").startsWith(thisMonth) && i.issued && daysBetween(i.issued, i.paidDate) <= 7);
+  const trips = S.mileage.filter(m => (m.date || "").startsWith(thisMonth)), dueQs = taxQuarters().filter(q => q.days < 0);
+  return [
+    ["💰", "In the black", "More coming in than going out this month", mon.income > mon.expense + mon.mileage && mon.income > 0, `${usd0.format(mon.net)} so far`],
+    ["📬", "All caught up", "No late invoices", late.length === 0, late.length ? `${late.length} late` : open.length ? `${open.length} open, none late` : "Nothing open"],
+    ["⚡", "Quick pay", "An invoice paid within a week", quick.length > 0, quick.length ? plural(quick.length, "invoice") : "Not yet"],
+    ["🧾", "Busy month", "5 or more invoices sent", issued.length >= 5, `${issued.length} sent`],
+    ["🚗", "Road log", "Mileage logged this month", trips.length > 0, trips.length ? plural(trips.length, "trip") : "No trips yet"],
+    ["🗂️", "All sorted", "Every business charge has a category", mon.todoN === 0, mon.todoN ? `${mon.todoN} to sort` : "All clear"],
+    ["🏛️", "Tax ready", "Quarterly taxes paid on time", dueQs.length > 0 && dueQs.every(q => q.short < 1), dueQs.length ? (dueQs.every(q => q.short < 1) ? "On track" : "Behind") : "First due date ahead"],
+  ];
+}
+function viewBizFun() {
+  const facts = bizFunFacts(), badges = bizFunBadges(), earned = badges.filter(b => b[3]).length;
+  if (!facts.length) return `<p class="empty">Fun facts show up once invoices, mileage or business accounts have some history.</p>`;
+  const pick = S.funShownBiz = ((S.funPickBiz ?? Math.floor(Date.now() / 864e5)) % facts.length + facts.length) % facts.length, hero = facts[pick];
+  const prev = lastMonths(2)[0], p = pnl(`${prev}-01`, `${prev}-31`), pm = sumBy(S.mileage.filter(m => (m.date || "").startsWith(prev)), m => m.miles);
+  const pInv = S.invoices.filter(i => (i.issued || "").startsWith(prev)).length;
+  const item = (label, value, sub) => `<div class="wrap-item"><div class="label">${label}</div><div class="value">${esc(value)}</div><div class="sub">${esc(sub)}</div></div>`;
+  return `
+  <section class="fun-hero" aria-live="polite">
+    <div class="fun-hero-top"><span class="sheet-sub">Fun fact ${pick + 1} of ${facts.length}</span><button class="btn" data-fun-shuffle="biz">Another one</button></div>
+    <div class="fun-hero-body"><span class="fun-icon big" aria-hidden="true">${hero.icon}</span><div><div class="fun-big">${esc(hero.big)}</div><p>${esc(hero.text)}</p></div></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>${monthName(thisMonth).split(" ")[0]} badges</h2><p>${earned} of ${badges.length} earned · they reset each month</p></div>
+    <div class="badges">${badges.map(([icon, name, how, got, prog]) => `<div class="badge${got ? " got" : ""}"><span class="fun-icon" aria-hidden="true">${icon}</span><div><b>${esc(name)}</b>${got ? ` <span class="pill">Earned</span>` : ""}<small>${esc(how)}</small><small class="prog">${esc(prog)}</small></div></div>`).join("")}</div>
+  </section>
+  ${p.income || p.expense || pm || pInv ? `<section class="panel"><div class="panel-head"><h2>${monthName(prev).split(" ")[0]}, wrapped</h2><p>Last month in four numbers</p></div><div class="wrap-grid">
+    ${item("Came in", usd0.format(p.income), plural(pInv, "invoice") + " sent")}${item("Went out", usd0.format(p.expense + p.mileage), "expenses and mileage")}${item("Profit", usd0.format(p.net), p.income ? `${Math.round(Math.max(0, p.net) / p.income * 100)}% kept` : "")}${item("Miles", Math.round(pm).toLocaleString(), plural(S.mileage.filter(m => (m.date || "").startsWith(prev)).length, "trip"))}
+  </div></section>` : ""}
+  ${facts.length > 1 ? `<section class="panel"><div class="panel-head"><h2>More fun facts</h2></div><div class="fun-grid">${facts.filter((_, i) => i !== pick).map(x => `<div class="fun-card"><span class="fun-icon" aria-hidden="true">${x.icon}</span><div><div class="fun-big">${esc(x.big)}</div><p>${esc(x.text)}</p></div></div>`).join("")}</div></section>` : ""}`;
+}
+
 function viewBiz() {
   const note = !bizIds().length && S.bizSub !== "setup" ? `<div class="notice">Mark Get In Tune's bank accounts and cards in <button class="btn link" style="padding:0;color:var(--accent);font-weight:600" data-bizsub="setup">Setup</button> to fill in income and expenses. Invoices and mileage work right away.</div>` : "";
-  const v = { overview: viewBizOverview, invoices: viewInvoices, mileage: viewMileage, taxes: viewTaxes, setup: viewBizSetup }[S.bizSub] || viewBizOverview;
+  const v = { overview: viewBizOverview, invoices: viewInvoices, mileage: viewMileage, taxes: viewTaxes, setup: viewBizSetup, fun: viewBizFun }[S.bizSub] || viewBizOverview;
   return note + v();
 }
 
@@ -1096,10 +1233,10 @@ function financeSnapshot() {
   const lines = [`Today: ${today.toDateString()} (day ${today.getDate()} of ${daysInMonth}).`];
   if (S.accounts.some(a => a.demo)) lines.push("NOTE: these are example numbers, not the household's real accounts. Say so if relevant.");
   lines.push("", "ACCOUNTS (debts negative):");
-  for (const a of S.accounts) lines.push(`- ${a.name} (${a.type}${a.business ? ", BUSINESS" : ""}, ${a.institution}): ${usd.format(a.balance)}${a.apr != null ? `, APR ${a.apr}%` : ""}${a.limit ? `, limit ${usd0.format(a.limit)}` : ""}${a.payment ? `, payment ${usd0.format(a.payment)}/mo` : ""}`);
-  const nw = S.accounts.reduce((s, a) => s + (+a.balance || 0), 0);
+  for (const a of S.accounts) lines.push(`- ${a.name} (${a.type}${a.business ? ", BUSINESS" : ""}, ${a.institution}): ${usd.format(a.balance)}${a.apr != null ? `, APR ${a.apr}%` : ""}${a.limit ? `, limit ${usd0.format(a.limit)}` : ""}${a.payment ? `, payment ${usd0.format(a.payment)}/mo` : ""}${a.dueDay ? `, due day ${a.dueDay}` : ""}`);
+  const nw = homeAccts().reduce((s, a) => s + (+a.balance || 0), 0);
   const series = netWorthSeries(), past = d => series.filter(p => p.d <= d).pop();
-  lines.push(`Net worth now ${usd0.format(nw)}` + [90, 180].map(n => { const p = past(new Date(today - n * 864e5).toISOString().slice(0, 10)); return p ? `; ${n} days ago ${usd0.format(p.v)}` : ""; }).join(""));
+  lines.push(`Household net worth (business accounts excluded) now ${usd0.format(nw)}` + [90, 180].map(n => { const p = past(new Date(today - n * 864e5).toISOString().slice(0, 10)); return p ? `; ${n} days ago ${usd0.format(p.v)}` : ""; }).join(""));
   lines.push("", `HOUSEHOLD SPENDING BY CATEGORY PER MONTH (business accounts, transfers and income excluded; ${monthName(thisMonth)} is partial):`);
   const byMonth = Object.fromEntries(months.map(m => [m, spendByCat(m)]));
   const cats = [...new Set(months.flatMap(m => [...byMonth[m].keys()]))];
@@ -1489,7 +1626,9 @@ app.addEventListener("click", e => {
   if (e.target.closest("[data-close-detail]")) { closeDetail(); return; }
   const dt = e.target.closest("[data-detail]");
   if (dt && !e.target.closest("input,select,button,a,label")) { openDetail(dt); return; }
-  if (e.target.closest("[data-fun-shuffle]")) { S.funPick = (S.funShown ?? 0) + 1; render(true); return; }
+  const fs = e.target.closest("[data-fun-shuffle]");
+  if (fs) { if (fs.dataset.funShuffle === "biz") S.funPickBiz = (S.funShownBiz ?? 0) + 1; else S.funPick = (S.funShown ?? 0) + 1; render(true); return; }
+  if (e.target.closest("[data-card-fill]")) { const fills = cardFills(); write(async db => { for (const { a, patch } of fills) await db.doc(`accounts/${a.id}`).update(patch); }, `Filled in ${plural(fills.length, "card")}. Check them against a statement.`); return; }
   const go = e.target.closest("[data-goto]"); if (go) { setTab(go.dataset.goto); render(true); return; }
   const m = e.target.closest("[data-month]"); if (m && S.tab === "where") { S.whereMonth = m.dataset.month; render(true); return; }
   const sub = e.target.closest("[data-bizsub]");
@@ -1541,7 +1680,8 @@ app.addEventListener("change", e => {
     }, key.length >= 3 && !NOT_SPENDING.has(cat) && cat !== "Uncategorized" ? `Saved. Future “${key}” charges go to ${cat}.` : "Category saved");
   }
   if (t.dataset.acct) {
-    const v = t.value === "" ? null : parseFloat(t.value);
+    let v = t.value === "" ? null : parseFloat(t.value);
+    if (v != null && t.dataset.field === "dueDay") v = Math.min(31, Math.max(1, Math.round(v)));
     write(db => db.doc(`accounts/${t.dataset.acct}`).update({ [t.dataset.field]: v }), "Saved");
   }
   if (t.id === "bizTodo") { S.bizTodo = t.checked; document.getElementById("bizList").innerHTML = bizTable(); return; }

@@ -22,6 +22,7 @@ Sync the Patterson Spending dashboard at https://claude.ai/artifact/8Aq4chNUNzxC
 7. For each id in `out/pinned.json`, write `{"<collection>/<doc_id>": <version from step 5>}` into `out/versions.json`. Then run `python -m sync.plan_writes --existing out/existing --business-accounts out/business_accounts.json --versions out/versions.json` and apply `out/batches/pinned*.json` the same way. If a batch is refused because a version changed, re-read that doc and redo steps 5–7 once.
 8. Read `budgets`, `bills`, `invoices`, `taxPayments` and `meta/business`. Send a push notification only in these cases:
    - a bill is due within 3 days and its `paidMonth` isn't the current month
+   - a household credit card (`type: "credit"`, not `business`) with a `dueDay` is due within 3 days, it owes money, and no payment (a positive amount described like PAYMENT, AUTOPAY or THANK YOU) has posted on it in the 28 days before that due date
    - a category is over budget this month
    - a business invoice with no `paidDate` is 30 or more days past its `due` date (or `issued` + 30 days when `due` is empty). Use the client code, never more.
    - a quarterly estimated tax payment is due within 7 days (Apr 15, Jun 15, Sep 15, Jan 15) and no `taxPayments` doc or business `Tax Payment` transaction for that quarter exists this year

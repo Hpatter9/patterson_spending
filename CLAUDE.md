@@ -42,7 +42,13 @@ Household and business budget tracker for the Patterson family. Several Claude s
   - monthly badges (`funBadges`)
   - last month "wrapped", plus a grid of facts (`funFacts`), such as coffee runs, meals out, most-visited place, no-spend days, round-ups, gas miles and spending pace
   - Coffee and Amazon are matched by the `COFFEE` and `AMAZON` regexes.
-- **Get In Tune** (her music therapy practice, getintunemusictherapy.com): Overview, Invoices, Mileage, Taxes, Setup, Ask. It has its own brand tokens under `body[data-space="biz"]`, taken from her site: indigo #352c73/#4a439e, violet #a12db5, Oswald headings and Assistant text. Her services are the default service lines in `BIZ_DEFAULTS`. Her logo (from static.wixstatic.com, trimmed to 314×112) is embedded in the header as a WebP data URI (`#bizLogo`), on a light background in dark mode.
+- **Get In Tune** (her music therapy practice, getintunemusictherapy.com): Overview, Invoices, Mileage, Taxes, Setup, Fun Facts, Ask. It has its own brand tokens under `body[data-space="biz"]`, taken from her site: indigo #352c73/#4a439e, violet #a12db5, Oswald headings and Assistant text. Her services are the default service lines in `BIZ_DEFAULTS`. Her logo (from static.wixstatic.com, trimmed to 314×112) is embedded in the header as a WebP data URI (`#bizLogo`), on a light background in dark mode.
 - Each side keeps its own Ask conversation and suggestions.
 - Budget rows, category bars and merchants open a detail panel. It shows an exact charges − refunds = total breakdown and a pending note (`catMath`), and budget rows carry a short pending/refunds line.
+- **The personal side counts household accounts only** (`homeAccts()`). Net worth, its history (`netWorthSeries()`, built from each snapshot's per-account `balances`) and Ask's net worth all leave out `business: true` accounts. Net Worth & Debt notes how many it left out.
+- **Card due days and APRs.** SimpleFIN doesn't send them, so they're `dueDay` and `apr` on each account, typed in on Net Worth & Debt.
+  - `cardTerms()` estimates them from history: the due day from the day payments usually post, and the APR from the latest interest charge ÷ the average balance in the 31 days of snapshots before it × 365/30.
+  - "Fill in estimates" (`cardFills()`) writes only fields that are still empty.
+  - Bills shows a Credit cards panel (`cardBillsPanel()`) with each card's next due date and today's balance, and marks it paid when a payment posted in the 4 weeks before.
+- **Get In Tune also has Fun Facts** (`viewBizFun`): invoices, mileage, profit and badges. It names clients by their code only.
 - Ask is a Claude companion. It runs on the viewer's own account through the page's ability to call Claude. It can propose changes, which save only when the viewer taps Apply.
