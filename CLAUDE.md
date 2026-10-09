@@ -36,7 +36,12 @@ Household and business budget tracker for the Patterson family. Several Claude s
 **Account names:** `rules.json` → `account_names` overrides the names the bank sends, by dashboard id. Example: Chase sends the Ink cards as "H. PATTERSON". The Chase Ink cards are Hunter's and belong on the personal side, not Get In Tune.
 
 **Two sides, picked from the title dropdown** (`SPACES` in `dashboard/index.html`; the choice is remembered per browser):
-- **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Ask.
+- **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Fun Facts, Ask.
+- **Fun Facts** (`viewFun`) is worked out in the browser from synced transactions, so it stores nothing and works on her free account. It has three parts:
+  - a fact-of-the-day card with an "Another one" button
+  - monthly badges (`funBadges`)
+  - last month "wrapped", plus a grid of facts (`funFacts`), such as coffee runs, meals out, most-visited place, no-spend days, round-ups, gas miles and spending pace
+  - Coffee and Amazon are matched by the `COFFEE` and `AMAZON` regexes.
 - **Get In Tune** (her music therapy practice, getintunemusictherapy.com): Overview, Invoices, Mileage, Taxes, Setup, Ask. It has its own brand tokens under `body[data-space="biz"]`, taken from her site: indigo #352c73/#4a439e, violet #a12db5, Oswald headings and Assistant text. Her services are the default service lines in `BIZ_DEFAULTS`. Her logo (from static.wixstatic.com, trimmed to 314×112) is embedded in the header as a WebP data URI (`#bizLogo`), on a light background in dark mode.
 - Each side keeps its own Ask conversation and suggestions.
 - Budget rows, category bars and merchants open a detail panel. It shows an exact charges − refunds = total breakdown and a pending note (`catMath`), and budget rows carry a short pending/refunds line.

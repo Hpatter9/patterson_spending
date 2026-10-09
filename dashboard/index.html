@@ -222,6 +222,34 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 @media (max-width: 560px) { .sheet { top: auto; bottom: 0; left: 0; transform: none; width: 100%; max-height: 88%; border-radius: 16px 16px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); } }
 .empty { color: var(--muted); padding: 24px 8px; text-align: center; }
 .tip { position: fixed; pointer-events: none; z-index: 20; background: var(--ink); color: var(--bg); padding: 6px 10px; border-radius: 8px; font-size: .8rem; max-width: 240px; }
+.fun-hero { border-radius: 14px; padding: 18px; display: grid; gap: 12px; border: 1px solid var(--line);
+  background: linear-gradient(135deg, var(--accent-soft), var(--surface) 70%); }
+.fun-hero-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.fun-hero-top .sheet-sub { margin: 0; }
+.fun-hero-body { display: flex; gap: 16px; align-items: center; padding: 4px; }
+.fun-hero-body .fun-big { font-size: clamp(1.7rem, 6vw, 2.4rem); }
+.fun-hero-body p { font-size: 1rem; }
+.fun-icon { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 1.3rem; line-height: 1; background: var(--accent-soft); }
+.fun-icon.big { width: 64px; height: 64px; font-size: 2rem; background: var(--surface); border: 1px solid var(--line); }
+.fun-big { font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; line-height: 1.2; overflow-wrap: anywhere; }
+.fun-hero p, .fun-card p { margin: 2px 0 0; color: var(--ink-2); font-size: .9rem; }
+.fun-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.fun-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); min-width: 0; }
+.fun-card > div, .fun-hero-body > div, .badge > div { min-width: 0; }
+.fun-card.clickable .fun-big::after, .fun-hero-body.clickable .fun-big::after { content: " ›"; color: var(--accent); }
+.badges { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.badge { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px dashed var(--line); border-radius: var(--r); }
+.badge .fun-icon { filter: grayscale(1); opacity: .45; background: var(--line); }
+.badge.got { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.badge.got .fun-icon { filter: none; opacity: 1; background: var(--surface); }
+.badge small { display: block; color: var(--muted); font-size: .78rem; }
+.badge small.prog { color: var(--ink-2); }
+.wrap-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.wrap-item { padding: 12px; border-radius: var(--r); background: var(--bg); border: 1px solid var(--line); min-width: 0; }
+.wrap-item .label { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.wrap-item .value { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; overflow-wrap: anywhere; }
+.wrap-item .sub { color: var(--ink-2); font-size: .85rem; }
+@media (prefers-reduced-motion: no-preference) { .fun-hero-body { animation: funIn .35s ease; } @keyframes funIn { from { opacity: 0; transform: translateY(6px); } } }
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: .85rem; z-index: 30; }
 @media (prefers-reduced-motion: no-preference) { .track b, .hbar .bar, .util b { transition: width .3s ease; } }
 </style>
@@ -245,7 +273,7 @@ const CATEGORIES = ["Groceries","Dining","Shopping","Gas","Transportation","Util
 const NOT_SPENDING = new Set(["Income","Transfer"]);
 // txns = household only; allTxns = every account (last 7 months); bizTxns = business accounts since January 1.
 const SPACES = {
-  home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["ask", "Ask"]] },
+  home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["fun", "Fun Facts"], ["ask", "Ask"]] },
   biz: { title: "Get In Tune", sub: "Therapy & coaching for life's big changes", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["ask", "Ask"]] },
 };
 const S = { space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
@@ -266,7 +294,7 @@ const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDa
 
 try { const sp = localStorage.getItem("ps-space"); if (SPACES[sp]) S.space = sp; const lt = JSON.parse(localStorage.getItem("ps-lasttab") || "null"); if (lt) Object.assign(S.lastTab, lt); } catch (e) {}
 if (/^#(biz|getintune)$/.test(location.hash)) S.space = "biz";
-else if (/^#(month|where|worth|bills)$/.test(location.hash)) { S.space = "home"; S.lastTab.home = location.hash.slice(1); }
+else if (/^#(month|where|worth|bills|fun)$/.test(location.hash)) { S.space = "home"; S.lastTab.home = location.hash.slice(1); }
 function setTab(key) { // "month" | "ask" | "biz:invoices" ...
   S.lastTab[S.space] = key;
   if (key.startsWith("biz:")) { S.tab = "biz"; S.bizSub = key.slice(4); } else S.tab = key;
@@ -688,6 +716,148 @@ function pairBars(months, a, b) {
     s += `<rect class="hit" x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}" data-tip="${esc(monthName(m))}: ${esc(usd0.format(a[i]))} in, ${esc(usd0.format(b[i]))} out, ${esc(usd0.format(a[i] - b[i]))} profit"/>`;
   });
   return s + `</svg>`;
+}
+
+/* ---------- fun facts ---------- */
+// Playful stats worked out in the browser from the synced transactions. Nothing is stored.
+const COFFEE = /COFFEE|STARBUCKS|DUTCH BROS|ESPRESSO|PEET'?S|DUNKIN|CARIBOU|SCOOTER'?S|BIGGBY|PHILZ|\bCAFE\b|ROASTER/i;
+const AMAZON = /AMAZON|AMZN/i;
+const WEEKDAYS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+const payeeOf = t => (t.payee || t.description || "Unknown").trim();
+const dayOfWeek = k => new Date(k + "T12:00").getDay();
+const sumOut = rows => rows.reduce((a, t) => a - t.amount, 0);
+function noSpendDays(charges, from, to) { // days in [from, to] with no charges, and the longest run of them
+  const spent = new Set(charges.map(t => t.date)), days = [];
+  for (let k = from; k <= to; k = addDays(k, 1)) days.push(k);
+  let run = 0, best = 0, free = 0, weekend = false;
+  days.forEach((k, i) => {
+    if (spent.has(k)) { run = 0; return; }
+    free++; best = Math.max(best, ++run);
+    if (dayOfWeek(k) === 0 && i > 0 && !spent.has(days[i - 1])) weekend = true;
+  });
+  return { free, best, weekend, total: days.length };
+}
+function funData() {
+  const charges = S.txns.filter(t => isSpend(t) && t.amount < 0 && t.date);
+  const month = charges.filter(t => t.date.startsWith(thisMonth));
+  const since90 = addDays(todayKey, -90), recent = charges.filter(t => t.date >= since90);
+  const prev = lastMonths(2)[0], prevRows = charges.filter(t => t.date.startsWith(prev));
+  return { charges, month, recent, prev, prevRows };
+}
+function funFacts(f) {
+  const facts = [], day = today.getDate(), monthWord = monthName(thisMonth).split(" ")[0];
+  const add = (icon, big, text, attrs = "") => facts.push({ icon, big, text, attrs });
+
+  const coffee = f.month.filter(t => COFFEE.test(payeeOf(t)));
+  if (coffee.length) add("☕", plural(coffee.length, "coffee run"), `${usd.format(sumOut(coffee))} so far in ${monthWord}. That's one every ${Math.max(1, Math.round(day / coffee.length))} day${Math.round(day / coffee.length) > 1 ? "s" : ""}.`);
+  else if (f.recent.some(t => COFFEE.test(payeeOf(t)))) add("☕", "0 coffee runs", `Not a single coffee shop charge in ${monthWord} yet. Home brew is winning.`);
+
+  const dining = f.month.filter(t => t.category === "Dining"), groc = sumOut(f.month.filter(t => t.category === "Groceries"));
+  if (dining.length) add("🍽️", `${plural(dining.length, "meal")} out`, `About every ${Math.max(1, Math.round(day / dining.length))} days.${groc ? ` For every $1 at the grocery store, ${usd.format(sumOut(dining) / groc)} went to restaurants.` : ""}`, detailAttrs("cat", "Dining", thisMonth));
+
+  const visits = new Map(); for (const t of f.recent) { const k = payeeOf(t); visits.set(k, (visits.get(k) || 0) + 1); }
+  const fav = [...visits].sort((a, b) => b[1] - a[1])[0];
+  if (fav && fav[1] >= 3) add("💛", fav[0], `Your most loyal spot: ${fav[1]} visits in the last 90 days.`, detailAttrs("merchant", fav[0], "ytd"));
+
+  if (f.month.length) {
+    const big = f.month.reduce((a, t) => t.amount < a.amount ? t : a), tiny = f.month.reduce((a, t) => t.amount > a.amount ? t : a);
+    add("🎉", usd.format(-big.amount), `Biggest single purchase of ${monthWord}: ${payeeOf(big)} on ${fmtDay(big.date)}.`, detailAttrs("merchant", payeeOf(big), thisMonth));
+    if (tiny !== big) add("🔍", usd.format(-tiny.amount), `Smallest purchase of ${monthWord}: ${payeeOf(tiny)}.`);
+    const places = new Set(f.month.map(payeeOf)).size;
+    add("🗺️", plural(places, "place"), `You've spent money at ${places} different places in ${monthWord}, across ${plural(f.month.length, "purchase")}.`);
+    const roundUp = f.month.reduce((a, t) => a + (Math.ceil(-t.amount) + t.amount), 0);
+    if (roundUp >= 1) add("🪙", usd.format(roundUp), `Rounding every ${monthWord} purchase up to the next dollar would have tucked away this much. That's ${usd0.format(roundUp * 12)} a year.`);
+  }
+
+  if (f.recent.length >= 10) {
+    const by = Array(7).fill(0); for (const t of f.recent) by[dayOfWeek(t.date)] -= t.amount;
+    const top = by.indexOf(Math.max(...by)), all = by.reduce((a, b) => a + b, 0), weekend = (by[0] + by[6]) / all;
+    add("📅", WEEKDAYS[top], `Your biggest spending day of the week: ${Math.round(by[top] / all * 100)}% of the last 90 days landed on ${WEEKDAYS[top]}. Weekends took ${Math.round(weekend * 100)}%.`);
+  }
+
+  const ns = noSpendDays(f.charges, `${thisMonth}-01`, todayKey);
+  if (ns.free) add("🧘", plural(ns.free, "no-spend day"), `Days in ${monthWord} without a single purchase. Longest streak: ${plural(ns.best, "day")}.`);
+
+  const amz = f.month.filter(t => AMAZON.test(payeeOf(t)));
+  if (amz.length) add("📦", plural(amz.length, "Amazon order"), `${usd.format(sumOut(amz))} in ${monthWord}, about a box every ${Math.max(1, Math.round(day / amz.length))} days.`);
+
+  const gas = sumOut(f.month.filter(t => t.category === "Gas"));
+  if (gas >= 20) { const miles = gas / 3.3 * 25; add("⛽", `${Math.round(miles).toLocaleString()} miles`, `${monthWord}'s gas, at about $3.30 a gallon and 25 mpg. That's ${(miles / 1020).toFixed(1)} drives from Denver to Disneyland.`, detailAttrs("cat", "Gas", thisMonth)); }
+
+  const subs = sumOut(f.recent.filter(t => t.category === "Subscriptions")) / 3;
+  if (subs >= 5) add("📺", `${usd0.format(subs * 12)}/yr`, `What subscriptions cost at the pace of the last 90 days (about ${usd0.format(subs)} a month).`, detailAttrs("cat", "Subscriptions", thisMonth));
+
+  const refunds = S.txns.filter(t => t.date?.startsWith(thisMonth) && isSpend(t) && t.amount > 0);
+  if (refunds.length) add("↩️", usd.format(refunds.reduce((a, t) => a + t.amount, 0)), `Money stores gave back in ${monthWord}, across ${plural(refunds.length, "refund")}.`);
+
+  if (f.prevRows.length && day < 28) {
+    const now = sumOut(f.month), then = sumOut(f.prevRows.filter(t => +t.date.slice(8) <= day)), diff = now - then;
+    if (then > 0) add(diff <= 0 ? "🐢" : "🐇", `${Math.abs(Math.round(diff / then * 100))}% ${diff <= 0 ? "slower" : "faster"}`, `Spending pace vs. the same point in ${monthName(f.prev).split(" ")[0]}: ${usd0.format(now)} now, ${usd0.format(then)} by day ${day} then.`);
+  }
+
+  const snaps = netWorthSeries();
+  if (snaps.length >= 2) { const d = snaps[snaps.length - 1].v - snaps[0].v;
+    add(d >= 0 ? "📈" : "📉", `${d >= 0 ? "+" : "−"}${usd0.format(Math.abs(d))}`, `Change in net worth since tracking started on ${fmtDay(snaps[0].d)}.`); }
+  return facts;
+}
+function funBadges(f) {
+  const spent = spendByCat(thisMonth), budgets = S.budgets.filter(b => +b.limit > 0);
+  const under = budgets.filter(b => (spent.get(b.category) || 0) <= +b.limit).length;
+  const ns = noSpendDays(f.charges, `${thisMonth}-01`, todayKey);
+  const coffee = f.month.filter(t => COFFEE.test(payeeOf(t))).length;
+  const dining = spent.get("Dining") || 0, groc = spent.get("Groceries") || 0;
+  const overdue = S.bills.filter(b => b.paidMonth !== thisMonth && nextDue(b).overdue).length;
+  const snaps = netWorthSeries(), monthAgo = addDays(todayKey, -30), base = snaps.filter(p => p.d <= monthAgo).pop() || snaps[0];
+  return [
+    ["🏆", "Budget boss", "Every budget on track this month", budgets.length > 0 && under === budgets.length, budgets.length ? `${under} of ${budgets.length} so far` : "Set some budgets first"],
+    ["🧘", "Zen day", "A day with no purchases at all", ns.free > 0, ns.free ? plural(ns.free, "day") : "Not yet"],
+    ["🔥", "Hot streak", "3 no-spend days in a row", ns.best >= 3, `Best run: ${plural(ns.best, "day")}`],
+    ["🛋️", "Couch weekend", "A whole weekend without spending", ns.weekend, ns.weekend ? "Earned" : "Not yet"],
+    ["👩‍🍳", "Home chef", "More on groceries than dining out", groc > dining && groc > 0, `${usd0.format(groc)} vs ${usd0.format(dining)}`],
+    ["☕", "Home brew", "4 or fewer coffee runs", coffee <= 4, plural(coffee, "run")],
+    ["📬", "On time", "No overdue bills", S.bills.length > 0 && overdue === 0, S.bills.length ? (overdue ? `${overdue} overdue` : "All clear") : "Add bills first"],
+    ["🌱", "Growing", "Net worth up over the last month", snaps.length >= 2 && snaps[snaps.length - 1].v > base.v, snaps.length >= 2 ? "Based on daily syncs" : "Needs a few days of syncs"],
+  ];
+}
+function funWrapped(f) {
+  if (f.prevRows.length < 5) return "";
+  const name = monthName(f.prev).split(" ")[0], cats = spendByCat(f.prev);
+  const topCat = [...cats].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])[0];
+  const by = new Map(); for (const t of f.prevRows) { const k = payeeOf(t); by.set(k, (by.get(k) || 0) + 1); }
+  const topM = [...by].sort((a, b) => b[1] - a[1])[0];
+  const days = new Map(); for (const t of f.prevRows) days.set(t.date, (days.get(t.date) || 0) - t.amount);
+  const bigDay = [...days].sort((a, b) => b[1] - a[1])[0];
+  const item = (label, value, sub, attrs = "") => `<div class="wrap-item${attrs ? " clickable" : ""}" ${attrs}><div class="label">${label}</div><div class="value">${esc(value)}</div><div class="sub">${esc(sub)}</div></div>`;
+  return `<section class="panel wrapped">
+    <div class="panel-head"><h2>${esc(name)}, wrapped</h2><p>Last month in four numbers</p></div>
+    <div class="wrap-grid">
+      ${item("Purchases", String(f.prevRows.length), `about ${(f.prevRows.length / new Date(+f.prev.slice(0, 4), +f.prev.slice(5), 0).getDate()).toFixed(1)} a day`)}
+      ${topCat ? item("Top category", topCat[0], usd0.format(topCat[1]), detailAttrs("cat", topCat[0], f.prev)) : ""}
+      ${item("Most visited", topM[0], plural(topM[1], "visit"), detailAttrs("merchant", topM[0], f.prev))}
+      ${item("Biggest day", fmtDay(bigDay[0]), usd0.format(bigDay[1]))}
+    </div>
+  </section>`;
+}
+function viewFun() {
+  const f = funData(), facts = funFacts(f);
+  if (!facts.length) return `<p class="empty">Fun facts show up once a few purchases have synced.</p>`;
+  const pick = S.funShown = ((S.funPick ?? Math.floor(Date.now() / 864e5)) % facts.length + facts.length) % facts.length, hero = facts[pick];
+  const card = x => `<div class="fun-card${x.attrs ? " clickable" : ""}" ${x.attrs}><span class="fun-icon" aria-hidden="true">${x.icon}</span><div><div class="fun-big">${esc(x.big)}</div><p>${esc(x.text)}</p></div></div>`;
+  const badges = funBadges(f), earned = badges.filter(b => b[3]).length;
+  return `
+  <section class="fun-hero" aria-live="polite">
+    <div class="fun-hero-top"><span class="sheet-sub">Fun fact ${pick + 1} of ${facts.length}</span><button class="btn" data-fun-shuffle>Another one</button></div>
+    <div class="fun-hero-body${hero.attrs ? " clickable" : ""}" ${hero.attrs}><span class="fun-icon big" aria-hidden="true">${hero.icon}</span><div><div class="fun-big">${esc(hero.big)}</div><p>${esc(hero.text)}</p></div></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>${monthName(thisMonth).split(" ")[0]} badges</h2><p>${earned} of ${badges.length} earned · they reset each month</p></div>
+    <div class="badges">${badges.map(([icon, name, how, got, prog]) => `<div class="badge${got ? " got" : ""}"><span class="fun-icon" aria-hidden="true">${icon}</span><div><b>${esc(name)}</b>${got ? ` <span class="pill">Earned</span>` : ""}<small>${esc(how)}</small><small class="prog">${esc(prog)}</small></div></div>`).join("")}</div>
+  </section>
+  ${funWrapped(f)}
+  <section class="panel">
+    <div class="panel-head"><h2>More fun facts</h2><p>Ones marked › open the purchases behind them</p></div>
+    <div class="fun-grid">${facts.filter((_, i) => i !== pick).map(card).join("")}</div>
+  </section>`;
 }
 
 function viewBiz() {
@@ -1262,7 +1432,7 @@ function render(force) {
   else if (S.accounts.some(a => a.demo)) notice = `<div class="notice">These are <b>example numbers</b> so you can try the layout. Your real accounts replace them after the first bank sync.</div>`;
   if (!S.db && !S.error) { app.innerHTML = notice + `<div class="empty">Sign in to claude.ai to see the household numbers.</div>`; return; }
   if (!S.ready.accounts || !S.ready.txns) { app.innerHTML = `<div class="empty">Loading your household numbers…</div>`; return; }
-  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, biz: viewBiz, ask: viewAsk }[S.tab] || (S.space === "biz" ? viewBiz : viewMonth);
+  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, fun: viewFun, biz: viewBiz, ask: viewAsk }[S.tab] || (S.space === "biz" ? viewBiz : viewMonth);
   app.innerHTML = notice + v() + detailHtml();
 }
 function renderChip() {
@@ -1319,6 +1489,7 @@ app.addEventListener("click", e => {
   if (e.target.closest("[data-close-detail]")) { closeDetail(); return; }
   const dt = e.target.closest("[data-detail]");
   if (dt && !e.target.closest("input,select,button,a,label")) { openDetail(dt); return; }
+  if (e.target.closest("[data-fun-shuffle]")) { S.funPick = (S.funShown ?? 0) + 1; render(true); return; }
   const go = e.target.closest("[data-goto]"); if (go) { setTab(go.dataset.goto); render(true); return; }
   const m = e.target.closest("[data-month]"); if (m && S.tab === "where") { S.whereMonth = m.dataset.month; render(true); return; }
   const sub = e.target.closest("[data-bizsub]");
