@@ -285,7 +285,7 @@ const SPACES = {
   home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["rewards", "Rewards"], ["fun", "Fun Facts"], ["ask", "Ask"]] },
   biz: { title: "Get In Tune", sub: "Therapy & coaching for life's big changes", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["biz:fun", "Fun Facts"], ["ask", "Ask"]] },
 };
-const S = { rewards: [], rwEdit: null, space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
+const S = { rewards: [], rwEdit: null, rwCardEdit: null, space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
   invoices: [], mileage: [], taxPayments: [], bizMeta: null, bizSub: "overview", bizSearch: "", bizTodo: false,
   ready: { accounts: false, txns: false }, sample: undefined, sampleTools: false, chat: [], draft: "", asking: null, whereMonth: null, search: "", catFilter: "", error: null };
 
@@ -823,6 +823,14 @@ const REWARD_CARDS = {
     { key: "lyft", name: "Lyft credit", amount: 10, per: "month", match: /LYFT.*CREDIT/i, note: "In the Lyft app, through Sept 2027" },
     { key: "peloton", name: "Peloton membership", amount: 10, per: "month", match: /PELOTON.*CREDIT/i, note: "Through 2027" },
     GE] },
+  csrb: { name: "Chase Sapphire Reserve for Business", prog: "ur", earn: {}, base: 1, perks: [
+    { key: "travel", name: "Travel credit", amount: 300, per: "cardyear", match: /TRAVEL CREDIT/i, note: "Any travel purchase counts" },
+    { key: "edit", name: "The Edit hotel credit", amount: 500, per: "year", match: /THE EDIT/i, note: "Prepaid 2-night stays through Chase Travel. Chase's page lists $250 through 2026, so check yours" },
+    { key: "ziprecruiter", name: "ZipRecruiter", amount: 200, per: "half", match: /ZIPRECRUITER/i },
+    { key: "gworkspace", name: "Google Workspace", amount: 200, per: "year", match: /GOOGLE.*(WORKSPACE|GSUITE)/i },
+    { key: "giftcards", name: "Giftcards.com", amount: 100, per: "year", match: /GIFTCARDS/i },
+    { key: "lyft", name: "Lyft credit", amount: 10, per: "month", match: /LYFT.*CREDIT/i, note: "In the Lyft app, through Sept 2027" },
+    GE] },
   csp: { name: "Chase Sapphire Preferred", prog: "ur", earn: { Dining: 3, Travel: 2, Gas: 3 }, base: 1, perks: [
     { key: "hotel", name: "Chase Travel hotel credit", amount: 100, per: "cardyear", match: /HOTEL CREDIT/i, note: "Prepaid hotels booked through Chase Travel" }, GE] },
   cfu: { name: "Chase Freedom Unlimited", prog: "ur", earn: { Dining: 3 }, base: 1.5, perks: [] },
@@ -831,8 +839,11 @@ const REWARD_CARDS = {
   inkc: { name: "Chase Ink Business Cash", prog: "ur", earn: { Gas: 2, Dining: 2, Utilities: 5 }, base: 1, perks: [] },
   hyatt: { name: "World of Hyatt Card", prog: "hyatt", earn: { Dining: 2, Transportation: 2 }, base: 1, perks: [
     { key: "night", name: "Free night (Category 1–4)", amount: 1, unit: "night", per: "cardyear", note: "Posts to Hyatt after each card anniversary" }] },
-  swp: { name: "Southwest Rapid Rewards Priority", prog: "sw", earn: { Travel: 3, Dining: 2, Gas: 2 }, base: 1, perks: [
-    { key: "swcredit", name: "Southwest travel credit", amount: 75, per: "cardyear", match: /SOUTHWEST.*CREDIT|TRAVEL CREDIT/i, note: "Check it's still on your card. Southwest changed its cards in 2025" }] },
+  swp: { name: "Southwest Rapid Rewards Priority", prog: "sw", earn: { Travel: 4, Dining: 2, Gas: 2 }, base: 1, perks: [] },
+  swprem: { name: "Southwest Rapid Rewards Premier", prog: "sw", earn: { Travel: 3, Dining: 2, Gas: 2 }, base: 1, perks: [] },
+  swplus: { name: "Southwest Rapid Rewards Plus", prog: "sw", earn: { Travel: 2, Dining: 2, Gas: 2 }, base: 1, perks: [] },
+  swpremb: { name: "Southwest Rapid Rewards Premier Business", prog: "sw", earn: { Travel: 3, Dining: 2, Gas: 2 }, base: 1, perks: [] },
+  swperf: { name: "Southwest Rapid Rewards Performance Business", prog: "sw", earn: { Travel: 4, Dining: 2, Gas: 2 }, base: 1, perks: [GE] },
   vx: { name: "Capital One Venture X", prog: "c1", earn: {}, base: 2, perks: [
     { key: "travel", name: "Capital One Travel credit", amount: 300, per: "cardyear", match: /TRAVEL CREDIT|CAPITAL ONE TRAVEL/i, note: "Bookings through Capital One Travel. 10,000 bonus miles also post each anniversary" }, GE] },
   v1: { name: "Capital One VentureOne", prog: "c1", earn: {}, base: 1.25, perks: [] },
@@ -846,8 +857,8 @@ const REWARD_CARDS = {
   frontier: { name: "Frontier Airlines Card", prog: "frontier", earn: { Dining: 3 }, base: 1, perks: [] },
   none: { name: "No rewards", prog: null, earn: {}, base: 0, perks: [] },
 };
-const CARD_GUESS = [[/SAPPHIRE RESERVE/i, "csr"], [/SAPPHIRE PREFERRED/i, "csp"], [/FREEDOM UNLIMITED/i, "cfu"], [/INK.*PREFERRED/i, "inkp"], [/INK.*UNLIMITED/i, "inku"],
-  [/INK.*CASH/i, "inkc"], [/HYATT/i, "hyatt"], [/RAPID REWARDS|SOUTHWEST/i, "swp"], [/VENTURE ?X/i, "vx"], [/VENTUREONE|VENTURE ONE/i, "v1"], [/BLUE CASH/i, "bce"],
+const CARD_GUESS = [[/RESERVE.*BUSINESS|BUSINESS.*RESERVE/i, "csrb"], [/SAPPHIRE RESERVE/i, "csr"], [/SAPPHIRE PREFERRED/i, "csp"], [/FREEDOM UNLIMITED/i, "cfu"], [/INK.*PREFERRED/i, "inkp"], [/INK.*UNLIMITED/i, "inku"],
+  [/INK.*CASH/i, "inkc"], [/HYATT/i, "hyatt"], [/PERFORMANCE/i, "swperf"], [/(RAPID REWARDS|SOUTHWEST).*PREMIER.*BUS/i, "swpremb"], [/(RAPID REWARDS|SOUTHWEST).*PREMIER/i, "swprem"], [/(RAPID REWARDS|SOUTHWEST).*PLUS/i, "swplus"], [/RAPID REWARDS|SOUTHWEST/i, "swp"], [/VENTURE ?X/i, "vx"], [/VENTUREONE|VENTURE ONE/i, "v1"], [/BLUE CASH/i, "bce"],
   [/EVERYDAY/i, "amexed"], [/TRAVEL REWARDS/i, "bofatr"], [/COSTCO/i, "costco"], [/WYNDHAM/i, "wyn"], [/FRONTIER/i, "frontier"], [/SLATE|PLATINUM PLUS|SIMPLICITY/i, "none"]];
 const PERIOD_WORDS = { month: "a month", half: "every 6 months", year: "a year", cardyear: "a card year", "4yr": "every 4 years" };
 const rwDoc = id => S.rewards.find(d => d.id === id);
@@ -911,7 +922,12 @@ function rewardsSnapshot() { // for Ask
 }
 function viewRewards() {
   const cards = rwCards(), totals = programTotals(), ro = S.canWrite ? "" : "disabled";
-  const prodOpts = sel => `<option value="">Pick the card…</option>` + Object.entries(REWARD_CARDS).map(([k, p]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  const groups = [["Chase", /^Chase/], ["Southwest (Chase)", /^Southwest/], ["World of Hyatt (Chase)", /Hyatt/], ["American Express", /^Amex/], ["Capital One", /^Capital One/], ["Bank of America", /^BofA/], ["Citi", /Costco/], ["Barclays", /Wyndham|Frontier/], ["Other", /./]];
+  const prodOpts = sel => { const left = Object.entries(REWARD_CARDS); let out = `<option value="">Pick the card…</option>`;
+    for (const [label, re] of groups) { const mine = left.filter(([, p]) => re.test(p.name)); if (!mine.length) continue;
+      mine.forEach(m => left.splice(left.indexOf(m), 1));
+      out += `<optgroup label="${label}">` + mine.map(([k, p]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${esc(p.name)}</option>`).join("") + `</optgroup>`; }
+    return out; };
   const cardLabel = a => `${esc(a.name)}${a.last4 ? ` <small style="display:inline;color:var(--muted)">·${esc(a.last4)}</small>` : ""}${a.business ? ` <span class="pill">Get In Tune</span>` : ""}`;
   const items = [];
   for (const a of cards) for (const k of rwPerks(a)) if (!k.off) items.push({ a, k, s: perkStatus(a, k) });
@@ -947,15 +963,25 @@ function viewRewards() {
         <button class="btn" type="submit">Add perk</button></form>` : ""}
       <p class="privacy">Untick a perk that isn't on your card. Amounts come from each card's published terms as of October 2026, so check the issuer's app if one looks off.</p>
     </div>`; };
+  const cardEdit = a => { const d = rwDoc(`card_${a.id}`) || {};
+    const monthOpts = `<option value="">Not set</option>` + Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${+d.annivMonth === i + 1 ? "selected" : ""}>${new Date(2026, i, 1).toLocaleString("en-US", { month: "long" })}</option>`).join("");
+    return `<div class="rw-edit">
+      <form class="add" data-rw-cardform="${esc(a.id)}">
+        <label>Name<input name="nick" maxlength="60" value="${esc(a.name)}" placeholder="${esc(a.bankName || a.name)}"></label>
+        <label>Card<select name="product">${prodOpts(rwProduct(a) || "")}</select></label>
+        <label>Renewal month<select name="anniv">${monthOpts}</select></label>
+        <button class="btn primary" type="submit">Save</button>
+      </form>
+      <p class="privacy">The bank calls this card “${esc(a.bankName || a.name)}”${a.last4 ? ` ·${esc(a.last4)}` : ""}. A name you give it shows everywhere on the dashboard. Leave the name blank to go back to the bank's.</p>
+    </div>`; };
+  const editBtn = a => S.canWrite ? `<button class="btn" data-rw-cardedit="${esc(a.id)}">${S.rwCardEdit === a.id ? "Close" : "Edit card"}</button>` : "";
   const cardPanel = a => {
     const key = rwProduct(a), p = REWARD_CARDS[key], d = rwDoc(`card_${a.id}`) || {}, perks = rwPerks(a).filter(k => !k.off);
     const needsAnniv = perks.some(k => k.per === "cardyear"), editing = S.rwEdit === a.id;
-    const monthOpts = `<option value="">Renewal month…</option>` + Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${+d.annivMonth === i + 1 ? "selected" : ""}>${new Date(2026, i, 1).toLocaleString("en-US", { month: "long" })}</option>`).join("");
     return `<section class="panel rw-card">
       <div class="panel-head"><div><h2 style="font-size:1.05rem">${cardLabel(a)}</h2><p>${p?.prog ? `${esc(REWARD_PROGRAMS[p.prog].name)} · ${esc(earnText(p))}` : "No points on this card"}</p></div>
-        <div class="row-actions">${S.canWrite ? `<select class="cat-select" id="rwp-${esc(a.id)}" data-rw-product="${esc(a.id)}" aria-label="Which card is ${esc(a.name)}">${prodOpts(key)}</select>` : ""}
-        ${needsAnniv && S.canWrite ? `<select class="cat-select" id="rwm-${esc(a.id)}" data-rw-anniv="${esc(a.id)}" aria-label="Renewal month">${monthOpts}</select>` : ""}
-        ${S.canWrite && p ? `<button class="btn link" style="color:var(--accent)" data-rw-edit="${esc(a.id)}">${editing ? "Done" : "Edit perks"}</button>` : ""}</div></div>
+        <div class="row-actions">${editBtn(a)}${S.canWrite && p ? `<button class="btn link" style="color:var(--accent)" data-rw-edit="${esc(a.id)}">${editing ? "Done" : "Edit perks"}</button>` : ""}</div></div>
+      ${S.rwCardEdit === a.id ? cardEdit(a) : needsAnniv && !d.annivMonth && S.canWrite ? `<p class="row-note" style="margin:0">Set the renewal month with Edit card so card-year credits reset on time.</p>` : ""}
       ${perks.map(k => perkRow(a, { k, s: perkStatus(a, k) })).join("") || (editing ? "" : `<p class="row-note" style="margin:0">No monthly or yearly perks to track.${S.canWrite && p ? " Add one with Edit perks." : ""}</p>`)}
       ${editing ? editRows(a) : ""}
     </section>`;
@@ -971,7 +997,8 @@ function viewRewards() {
     <div class="fig"><div class="label">Use within 31 days</div><div class="value" style="color:${soon.length ? "var(--warn)" : "inherit"}">${usd0.format(soon.reduce((s, i) => s + i.s.left, 0))}</div><div class="sub">${plural(soon.length, "perk")} reset soon</div></div>
   </div>
   ${unknown.length && S.canWrite ? `<section class="panel"><div class="panel-head"><h2>Which cards are these?</h2><p>The bank only sends the cardholder's name</p></div>
-    ${unknown.map(a => `<div class="budget-row"><div class="name">${cardLabel(a)}</div><div class="nums"><select class="cat-select" id="rwp-${esc(a.id)}" data-rw-product="${esc(a.id)}">${prodOpts("")}</select></div></div>`).join("")}</section>` : ""}
+    ${unknown.map(a => `<div class="budget-row"><div class="name">${cardLabel(a)}</div><div class="nums"><select class="cat-select" id="rwp-${esc(a.id)}" data-rw-product="${esc(a.id)}">${prodOpts("")}</select></div></div>`).join("")}
+    <p class="privacy">Picked the wrong one? Use Edit card on that card below to change it or give it a name.</p></section>` : ""}
   <div class="cols">
     <section class="panel">
       <div class="panel-head"><h2>Use it before it resets</h2><p>Perks with money left</p></div>
@@ -989,7 +1016,7 @@ function viewRewards() {
   </div>
   ${withPerks.map(cardPanel).join("")}
   ${plain.length ? `<section class="panel"><div class="panel-head"><h2>Other cards</h2><p>No credits to track</p></div>
-    ${plain.map(a => { const p = REWARD_CARDS[rwProduct(a)]; return `<div class="budget-row"><div class="name">${cardLabel(a)}<div class="row-note" style="font-weight:400">${p.prog ? esc(earnText(p)) : "No rewards"}</div></div><div class="nums">${S.canWrite ? `<select class="cat-select" id="rwp-${esc(a.id)}" data-rw-product="${esc(a.id)}">${prodOpts(rwProduct(a))}</select> <button class="btn link" style="color:var(--accent)" data-rw-edit="${esc(a.id)}">Add perk</button>` : ""}</div></div>`; }).join("")}</section>` : ""}`;
+    ${plain.map(a => { const p = REWARD_CARDS[rwProduct(a)]; return `<div class="budget-row"><div class="name">${cardLabel(a)}<div class="row-note" style="font-weight:400">${p.prog ? esc(earnText(p)) : "No rewards"}</div></div><div class="nums">${editBtn(a)} ${S.canWrite ? `<button class="btn link" style="color:var(--accent)" data-rw-edit="${esc(a.id)}">Add perk</button>` : ""}</div>${S.rwCardEdit === a.id ? `<div style="grid-column:1/-1">${cardEdit(a)}</div>` : ""}</div>`; }).join("")}</section>` : ""}`;
 }
 function rwSave(id, patch, msg) { write(db => rwDoc(id) ? db.doc(`rewards/${id}`).update(patch) : db.doc(`rewards/${id}`).set(patch), msg); }
 
@@ -1834,6 +1861,8 @@ app.addEventListener("click", e => {
   if (e.target.closest("[data-close-detail]")) { closeDetail(); return; }
   const dt = e.target.closest("[data-detail]");
   if (dt && !e.target.closest("input,select,button,a,label")) { openDetail(dt); return; }
+  const ce = e.target.closest("[data-rw-cardedit]");
+  if (ce) { S.rwCardEdit = S.rwCardEdit === ce.dataset.rwCardedit ? null : ce.dataset.rwCardedit; render(true); return; }
   const rw = e.target.closest("[data-rw-done],[data-rw-undo],[data-rw-edit],[data-rw-delcustom]");
   if (rw) {
     if (rw.dataset.rwEdit) { S.rwEdit = S.rwEdit === rw.dataset.rwEdit ? null : rw.dataset.rwEdit; render(true); return; }
@@ -1942,6 +1971,18 @@ function writeBiz(patch, msg) {
 }
 app.addEventListener("submit", e => {
   const f = e.target;
+  if (f.dataset.rwCardform) {
+    e.preventDefault();
+    const id = f.dataset.rwCardform, a = S.accounts.find(x => x.id === id), nick = f.elements.nick.value.trim();
+    const bank = a?.bankName || a?.name || "", product = f.elements.product.value || null, anniv = f.elements.anniv.value ? +f.elements.anniv.value : null;
+    S.rwCardEdit = null;
+    write(async db => {
+      if ((nick || bank) !== (a?.name || "")) await db.doc(`accounts/${id}`).update({ nickname: nick && nick !== bank ? nick : null });
+      const patch = { product, annivMonth: anniv };
+      await (rwDoc(`card_${id}`) ? db.doc(`rewards/card_${id}`).update(patch) : db.doc(`rewards/card_${id}`).set(patch));
+    }, "Card saved");
+    return;
+  }
   if (f.dataset.rwAddperk) {
     e.preventDefault();
     const name = f.elements.name.value.trim(), amount = Math.max(0, parseFloat(f.elements.amount.value) || 0), per = f.elements.per.value;
@@ -2039,7 +2080,7 @@ async function start() {
   S.db = db;
   try { const user = await window.claude.use("user"); const w = user?.can?.("data.write"); if (w === false) S.canWrite = false; S.me = await user?.id?.() ?? null; } catch (e) {}
   const cutoff = `${lastMonths(7)[0]}-01`;
-  db.collection("accounts").onSnapshot(s => { S.accounts = docs(s).sort((a, b) => (a.institution + a.name).localeCompare(b.institution + b.name)); S.ready.accounts = true; splitTxns(); watchBiz(); render(); }, fail);
+  db.collection("accounts").onSnapshot(s => { S.accounts = docs(s).map(a => a.nickname ? { ...a, bankName: a.name, name: a.nickname } : a).sort((a, b) => (a.institution + a.name).localeCompare(b.institution + b.name)); S.ready.accounts = true; splitTxns(); watchBiz(); render(); }, fail);
   db.collection("transactions").where("date", ">=", cutoff).orderBy("date", "desc").limit(1000).onSnapshot(s => { S.allTxns = docs(s); splitTxns(); S.ready.txns = true; render(); }, fail);
   db.collection("invoices").onSnapshot(s => { S.invoices = docs(s); render(); }, fail);
   db.collection("mileage").where("date", ">=", `${year - 1}-01-01`).onSnapshot(s => { S.mileage = docs(s); render(); }, fail);

@@ -55,7 +55,10 @@ Household and business budget tracker for the Patterson family. Several Claude s
   - Bills shows a Credit cards panel (`cardBillsPanel()`) with each card's next due date and today's balance, and marks it paid when a payment posted in the 4 weeks before.
 - **Rewards** (`viewRewards`) covers every credit card.
   - `REWARD_CARDS` is the catalog of card products: program, earn rates and perks. A perk has an amount and resets monthly, every 6 months, each calendar year, each card year or every 4 years. Amounts are as of October 2026, so update the catalog when issuers change them.
-  - `CARD_GUESS` picks each card's product from its name. Cards the bank sends only as a cardholder name ("M. WOODS") get picked on the page.
+  - `CARD_GUESS` picks each card's product from its name. Cards the bank sends only as a cardholder name ("M. WOODS") get picked on the page. Chase business cards, including the Sapphire Reserve for Business (`csrb`), arrive this way.
+  - **Edit card** on each card sets its product, its renewal month (for card-year credits) and a name.
+  - **Card names.** The name is saved as `nickname` on the account doc. The sync never writes that field, and the page shows it everywhere in place of the bank's name (`bankName` keeps the original).
+  - The Southwest Priority card's $75 travel credit ended in 2025, so it's not in the catalog.
   - A perk counts as used from whichever is more: matching statement credits on that card (the perk's `match` regex, positive amounts) or what was logged by hand.
   - Points balances aren't in SimpleFIN, so they're typed in. "Earned since" estimates points from purchases since then × the earn rates.
   - Ask sees the balances and the perks about to reset (`rewardsSnapshot()`).
