@@ -250,6 +250,15 @@ form.add input, form.add select { border: 1px solid var(--line); background: var
 .wrap-item .value { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; overflow-wrap: anywhere; }
 .wrap-item .sub { color: var(--ink-2); font-size: .85rem; }
 @media (prefers-reduced-motion: no-preference) { .fun-hero-body { animation: funIn .35s ease; } @keyframes funIn { from { opacity: 0; transform: translateY(6px); } } }
+.perk { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.perk.done { opacity: .7; }
+.perk-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; }
+.perk .row-actions { align-items: center; }
+.rw-log { font-size: .82rem; color: var(--ink-2); display: inline-flex; gap: 4px; align-items: center; }
+.rw-log input, .rw-edit input[type=number] { width: 72px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.rw-edit { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: var(--r); }
+.rw-edit-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: .88rem; }
+.rw-edit-row .meta { color: var(--muted); font-size: .8rem; }
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: .85rem; z-index: 30; }
 @media (prefers-reduced-motion: no-preference) { .track b, .hbar .bar, .util b { transition: width .3s ease; } }
 </style>
@@ -273,10 +282,10 @@ const CATEGORIES = ["Groceries","Dining","Shopping","Gas","Transportation","Util
 const NOT_SPENDING = new Set(["Income","Transfer"]);
 // txns = household only; allTxns = every account (last 7 months); bizTxns = business accounts since January 1.
 const SPACES = {
-  home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["fun", "Fun Facts"], ["ask", "Ask"]] },
+  home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["rewards", "Rewards"], ["fun", "Fun Facts"], ["ask", "Ask"]] },
   biz: { title: "Get In Tune", sub: "Therapy & coaching for life's big changes", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["biz:fun", "Fun Facts"], ["ask", "Ask"]] },
 };
-const S = { space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
+const S = { rewards: [], rwEdit: null, space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
   invoices: [], mileage: [], taxPayments: [], bizMeta: null, bizSub: "overview", bizSearch: "", bizTodo: false,
   ready: { accounts: false, txns: false }, sample: undefined, sampleTools: false, chat: [], draft: "", asking: null, whereMonth: null, search: "", catFilter: "", error: null };
 
@@ -294,7 +303,7 @@ const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDa
 
 try { const sp = localStorage.getItem("ps-space"); if (SPACES[sp]) S.space = sp; const lt = JSON.parse(localStorage.getItem("ps-lasttab") || "null"); if (lt) Object.assign(S.lastTab, lt); } catch (e) {}
 if (/^#(biz|getintune)$/.test(location.hash)) S.space = "biz";
-else if (/^#(month|where|worth|bills|fun)$/.test(location.hash)) { S.space = "home"; S.lastTab.home = location.hash.slice(1); }
+else if (/^#(month|where|worth|bills|rewards|fun)$/.test(location.hash)) { S.space = "home"; S.lastTab.home = location.hash.slice(1); }
 function setTab(key) { // "month" | "ask" | "biz:invoices" ...
   S.lastTab[S.space] = key;
   if (key.startsWith("biz:")) { S.tab = "biz"; S.bizSub = key.slice(4); } else S.tab = key;
@@ -786,6 +795,204 @@ function pairBars(months, a, b) {
   return s + `</svg>`;
 }
 
+/* ---------- rewards ---------- */
+// The bank sync has no points balances, so those are typed in (rewards/prog_<program>). Card perks come from REWARD_CARDS.
+// A perk counts as used from matching statement credits on that card, or from what was logged by hand, whichever is more
+// (rewards/card_<accountId>: product, annivMonth, used{<perk>_<period>}, perks{<perk>: {amount, off}}, custom{<key>: perk}).
+// Amounts are as of October 2026; issuers change them, so each one can be edited on the page.
+const REWARD_PROGRAMS = {
+  ur: { name: "Chase Ultimate Rewards", unit: "points", cpp: 1.5 },
+  c1: { name: "Capital One Miles", unit: "miles", cpp: 1.5 },
+  mr: { name: "Amex Membership Rewards", unit: "points", cpp: 1.5 },
+  hyatt: { name: "World of Hyatt", unit: "points", cpp: 1.7 },
+  sw: { name: "Southwest Rapid Rewards", unit: "points", cpp: 1.3 },
+  wyn: { name: "Wyndham Rewards", unit: "points", cpp: 0.9 },
+  frontier: { name: "Frontier Miles", unit: "miles", cpp: 1.1 },
+  bofa: { name: "Bank of America points", unit: "points", cpp: 1 },
+  amexcash: { name: "Amex Blue Cash (Reward Dollars)", unit: "cash" },
+  costco: { name: "Costco cash back (paid each February)", unit: "cash" },
+};
+const GE = { key: "ge", name: "Global Entry / TSA PreCheck", amount: 120, per: "4yr", match: /GLOBAL ENTRY|TSA ?PRE/i };
+const REWARD_CARDS = {
+  csr: { name: "Chase Sapphire Reserve", prog: "ur", earn: { Dining: 3, Travel: 4 }, base: 1, perks: [
+    { key: "travel", name: "Travel credit", amount: 300, per: "cardyear", match: /TRAVEL CREDIT/i, note: "Any travel purchase counts" },
+    { key: "edit", name: "The Edit hotel credit", amount: 500, per: "year", match: /THE EDIT/i, note: "Up to $250 per prepaid 2-night stay booked through The Edit" },
+    { key: "dining", name: "Exclusive Tables dining", amount: 150, per: "half", match: /DINING CREDIT|EXCLUSIVE TABLES/i, note: "Sapphire Reserve Exclusive Tables restaurants on OpenTable" },
+    { key: "stubhub", name: "StubHub / viagogo", amount: 150, per: "half", match: /STUBHUB|VIAGOGO/i, note: "Activate in the Chase app first" },
+    { key: "doordash", name: "DoorDash promos", amount: 25, per: "month", match: /DOORDASH.*(CREDIT|PROMO)/i, note: "Shows as promos in DoorDash with DashPass, so log it here" },
+    { key: "lyft", name: "Lyft credit", amount: 10, per: "month", match: /LYFT.*CREDIT/i, note: "In the Lyft app, through Sept 2027" },
+    { key: "peloton", name: "Peloton membership", amount: 10, per: "month", match: /PELOTON.*CREDIT/i, note: "Through 2027" },
+    GE] },
+  csp: { name: "Chase Sapphire Preferred", prog: "ur", earn: { Dining: 3, Travel: 2, Gas: 3 }, base: 1, perks: [
+    { key: "hotel", name: "Chase Travel hotel credit", amount: 100, per: "cardyear", match: /HOTEL CREDIT/i, note: "Prepaid hotels booked through Chase Travel" }, GE] },
+  cfu: { name: "Chase Freedom Unlimited", prog: "ur", earn: { Dining: 3 }, base: 1.5, perks: [] },
+  inkp: { name: "Chase Ink Business Preferred", prog: "ur", earn: { Travel: 3 }, base: 1, perks: [] },
+  inku: { name: "Chase Ink Business Unlimited", prog: "ur", earn: {}, base: 1.5, perks: [] },
+  inkc: { name: "Chase Ink Business Cash", prog: "ur", earn: { Gas: 2, Dining: 2, Utilities: 5 }, base: 1, perks: [] },
+  hyatt: { name: "World of Hyatt Card", prog: "hyatt", earn: { Dining: 2, Transportation: 2 }, base: 1, perks: [
+    { key: "night", name: "Free night (Category 1–4)", amount: 1, unit: "night", per: "cardyear", note: "Posts to Hyatt after each card anniversary" }] },
+  swp: { name: "Southwest Rapid Rewards Priority", prog: "sw", earn: { Travel: 3, Dining: 2, Gas: 2 }, base: 1, perks: [
+    { key: "swcredit", name: "Southwest travel credit", amount: 75, per: "cardyear", match: /SOUTHWEST.*CREDIT|TRAVEL CREDIT/i, note: "Check it's still on your card. Southwest changed its cards in 2025" }] },
+  vx: { name: "Capital One Venture X", prog: "c1", earn: {}, base: 2, perks: [
+    { key: "travel", name: "Capital One Travel credit", amount: 300, per: "cardyear", match: /TRAVEL CREDIT|CAPITAL ONE TRAVEL/i, note: "Bookings through Capital One Travel. 10,000 bonus miles also post each anniversary" }, GE] },
+  v1: { name: "Capital One VentureOne", prog: "c1", earn: {}, base: 1.25, perks: [] },
+  bce: { name: "Amex Blue Cash Everyday", prog: "amexcash", earn: { Groceries: 3, Gas: 3, Shopping: 3 }, base: 1, perks: [
+    { key: "disney", name: "Disney Bundle credit", amount: 7, per: "month", match: /DISNEY|HULU|ESPN/i, note: "Enroll in the Amex app" },
+    { key: "homechef", name: "Home Chef credit", amount: 15, per: "month", match: /HOME ?CHEF/i, note: "Enroll in the Amex app" }] },
+  amexed: { name: "Amex EveryDay", prog: "mr", earn: { Groceries: 2 }, base: 1, perks: [] },
+  bofatr: { name: "BofA Travel Rewards", prog: "bofa", earn: {}, base: 1.5, perks: [] },
+  costco: { name: "Costco Anywhere Visa", prog: "costco", earn: { Gas: 4, Dining: 3, Travel: 3 }, base: 1, perks: [] },
+  wyn: { name: "Wyndham Rewards Earner", prog: "wyn", earn: { Gas: 5, Dining: 2, Groceries: 2 }, base: 1, perks: [] },
+  frontier: { name: "Frontier Airlines Card", prog: "frontier", earn: { Dining: 3 }, base: 1, perks: [] },
+  none: { name: "No rewards", prog: null, earn: {}, base: 0, perks: [] },
+};
+const CARD_GUESS = [[/SAPPHIRE RESERVE/i, "csr"], [/SAPPHIRE PREFERRED/i, "csp"], [/FREEDOM UNLIMITED/i, "cfu"], [/INK.*PREFERRED/i, "inkp"], [/INK.*UNLIMITED/i, "inku"],
+  [/INK.*CASH/i, "inkc"], [/HYATT/i, "hyatt"], [/RAPID REWARDS|SOUTHWEST/i, "swp"], [/VENTURE ?X/i, "vx"], [/VENTUREONE|VENTURE ONE/i, "v1"], [/BLUE CASH/i, "bce"],
+  [/EVERYDAY/i, "amexed"], [/TRAVEL REWARDS/i, "bofatr"], [/COSTCO/i, "costco"], [/WYNDHAM/i, "wyn"], [/FRONTIER/i, "frontier"], [/SLATE|PLATINUM PLUS|SIMPLICITY/i, "none"]];
+const PERIOD_WORDS = { month: "a month", half: "every 6 months", year: "a year", cardyear: "a card year", "4yr": "every 4 years" };
+const rwDoc = id => S.rewards.find(d => d.id === id);
+const rwCards = () => S.accounts.filter(a => a.type === "credit");
+function rwProduct(a) { const d = rwDoc(`card_${a.id}`); return d?.product || CARD_GUESS.find(([re]) => re.test(a.name))?.[1] || null; }
+function rwPerks(a) {
+  const d = rwDoc(`card_${a.id}`) || {}, p = REWARD_CARDS[rwProduct(a)];
+  const all = [...(p?.perks || []), ...Object.entries(d.custom || {}).filter(([, c]) => c).map(([key, c]) => ({ key, custom: true, ...c }))];
+  return all.map(k => ({ ...k, amount: d.perks?.[k.key]?.amount ?? k.amount, off: !!d.perks?.[k.key]?.off }));
+}
+const lastDay = (y, m) => `${y}-${pad(m)}-${pad(new Date(y, m, 0).getDate())}`;
+function perkPeriod(per, annivMonth, at = todayKey) {
+  const y = +at.slice(0, 4), m = +at.slice(5, 7);
+  if (per === "month") return { key: at.slice(0, 7), start: `${at.slice(0, 7)}-01`, end: lastDay(y, m), label: monthName(at.slice(0, 7)).split(" ")[0] };
+  if (per === "half") return m <= 6 ? { key: `${y}H1`, start: `${y}-01-01`, end: `${y}-06-30`, label: `Jan–Jun ${y}` } : { key: `${y}H2`, start: `${y}-07-01`, end: `${y}-12-31`, label: `Jul–Dec ${y}` };
+  if (per === "4yr") return { key: "4y", start: addDays(at, -1461), end: null, label: "last 4 years" };
+  if (per === "cardyear" && annivMonth) {
+    const sy = m >= annivMonth ? y : y - 1, start = `${sy}-${pad(annivMonth)}-01`;
+    return { key: `cy${sy}`, start, end: addDays(`${sy + 1}-${pad(annivMonth)}-01`, -1), label: `card year from ${monthName(start.slice(0, 7), "short")} ${sy}` };
+  }
+  return { key: `${y}`, start: `${y}-01-01`, end: `${y}-12-31`, label: per === "cardyear" ? `${y} (set the renewal month for the card year)` : `${y}` };
+}
+function perkCredits(a, k, start, end) {
+  if (!k.match) return 0;
+  return S.allTxns.filter(t => t.accountId === a.id && t.amount > 0 && t.date >= start && (!end || t.date <= end) && k.match.test(`${t.payee || ""} ${t.description || ""}`)).reduce((s, t) => s + t.amount, 0);
+}
+function perkStatus(a, k) {
+  const d = rwDoc(`card_${a.id}`) || {}, per = perkPeriod(k.per, d.annivMonth), logged = d.used?.[`${k.key}_${per.key}`];
+  const manual = k.per === "4yr" ? (typeof logged === "string" && logged >= per.start ? k.amount : 0) : +logged || 0;
+  const auto = perkCredits(a, k, per.start, per.end), used = Math.min(k.amount, Math.max(auto, manual));
+  let ytd = null;
+  if (k.per === "month" || k.per === "half") { // this calendar year so far
+    const keys = k.per === "month" ? lastMonths(today.getMonth() + 1).map(m => `${m}-15`) : [`${year}-03-15`, ...(today.getMonth() >= 6 ? [`${year}-09-15`] : [])];
+    ytd = keys.reduce((s, at) => { const p = perkPeriod(k.per, null, at); return s + Math.min(k.amount, Math.max(perkCredits(a, k, p.start, p.end), +d.used?.[`${k.key}_${p.key}`] || 0)); }, 0);
+    ytd = { used: ytd, of: k.amount * keys.length };
+  }
+  return { per, used, auto, manual, left: k.amount - used, days: per.end ? daysBetween(todayKey, per.end) : null, ytd, usedOn: k.per === "4yr" && typeof logged === "string" ? logged : null };
+}
+function programTotals() {
+  const out = new Map();
+  for (const a of rwCards()) { const p = REWARD_CARDS[rwProduct(a)]; if (p?.prog) { if (!out.has(p.prog)) out.set(p.prog, []); out.get(p.prog).push(a); } }
+  return [...out].map(([key, cards]) => {
+    const prog = REWARD_PROGRAMS[key], d = rwDoc(`prog_${key}`) || {}, cpp = d.cpp ?? prog.cpp, asOf = d.asOf || null;
+    let earned = 0;
+    if (asOf) for (const a of cards) { const p = REWARD_CARDS[rwProduct(a)];
+      for (const t of S.allTxns) if (t.accountId === a.id && t.date > asOf && t.amount < 0 && !NOT_SPENDING.has(t.category)) earned += -t.amount * (p.earn[t.category] ?? p.base) / (prog.unit === "cash" ? 100 : 1); }
+    const bal = d.balance == null ? null : +d.balance, now = bal == null ? null : bal + earned;
+    return { key, prog, cards, bal, asOf, earned, now, cpp, value: now == null ? null : prog.unit === "cash" ? now : now * cpp / 100 };
+  });
+}
+const fmtPts = (prog, n) => prog.unit === "cash" ? usd0.format(n) : `${Math.round(n).toLocaleString()} ${prog.unit}`;
+function earnText(p) {
+  const parts = Object.entries(p.earn).sort((a, b) => b[1] - a[1]).map(([c, r]) => `${r}${REWARD_PROGRAMS[p.prog]?.unit === "cash" ? "%" : "x"} ${c.toLowerCase()}`);
+  return p.prog ? [...parts, `${p.base}${REWARD_PROGRAMS[p.prog].unit === "cash" ? "%" : "x"} everything else`].join(" · ") : "";
+}
+function rewardsSnapshot() { // for Ask
+  const lines = programTotals().filter(t => t.now != null).map(t => `- ${t.prog.name}: about ${fmtPts(t.prog, t.now)} (≈ ${usd0.format(t.value)})`);
+  for (const a of rwCards()) for (const k of rwPerks(a)) if (!k.off && k.per !== "4yr" && k.unit !== "night") { const s = perkStatus(a, k);
+    if (s.left > 0 && s.days != null && s.days <= 45) lines.push(`- ${a.name}${a.last4 ? " ·" + a.last4 : ""}: ${k.name} has ${usd0.format(s.left)} left, resets in ${s.days} days`); }
+  return lines;
+}
+function viewRewards() {
+  const cards = rwCards(), totals = programTotals(), ro = S.canWrite ? "" : "disabled";
+  const prodOpts = sel => `<option value="">Pick the card…</option>` + Object.entries(REWARD_CARDS).map(([k, p]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  const cardLabel = a => `${esc(a.name)}${a.last4 ? ` <small style="display:inline;color:var(--muted)">·${esc(a.last4)}</small>` : ""}${a.business ? ` <span class="pill">Get In Tune</span>` : ""}`;
+  const items = [];
+  for (const a of cards) for (const k of rwPerks(a)) if (!k.off) items.push({ a, k, s: perkStatus(a, k) });
+  const current = items.filter(i => i.k.unit !== "night");
+  const soon = current.filter(i => i.s.left > 0 && i.s.days != null && i.s.days <= 31).sort((x, y) => x.s.days - y.s.days || y.s.left - x.s.left);
+  const valueTotal = totals.reduce((s, t) => s + (t.value || 0), 0), withBal = totals.filter(t => t.bal != null).length;
+  const usedNow = current.filter(i => i.k.per !== "4yr").reduce((s, i) => s + i.s.used, 0), ofNow = current.filter(i => i.k.per !== "4yr").reduce((s, i) => s + i.k.amount, 0);
+  const unknown = cards.filter(a => !rwProduct(a));
+
+  const perkRow = (a, { k, s }) => {
+    const unit = k.unit === "night" ? (n => plural(n, "night")) : (n => usd0.format(n));
+    const pct = k.amount ? Math.min(100, s.used / k.amount * 100) : 0, done = s.left <= 0;
+    const when = k.per === "4yr" ? (s.used ? (s.usedOn ? `Used ${fmtDay(s.usedOn)} · available again ${fmtDay(addDays(s.usedOn, 1461))}` : "Used in the last 4 years") : "Available")
+      : `${done ? "All used" : `${unit(s.left)} left`} · resets in ${plural(s.days, "day")} (${s.per.label})`;
+    const ctl = !S.canWrite ? "" : done
+      ? (s.manual ? `<button class="btn link" data-rw-undo="${esc(a.id)}|${esc(k.key)}|${esc(s.per.key)}">Undo</button>` : "")
+      : `${k.per === "4yr" || k.unit === "night" ? "" : `<label class="rw-log">Used $<input type="number" min="0" step="any" inputmode="decimal" id="rwu-${esc(a.id)}-${esc(k.key)}" data-rw-used="${esc(a.id)}|${esc(k.key)}|${esc(s.per.key)}" value="${s.manual || ""}" placeholder="${s.auto ? Math.round(s.auto) : 0}"></label>`}<button class="btn" data-rw-done="${esc(a.id)}|${esc(k.key)}|${esc(s.per.key)}|${k.per === "4yr" ? "date" : k.amount}">Mark used</button>`;
+    return `<div class="perk${done ? " done" : ""}">
+      <div class="perk-head"><div><b>${esc(k.name)}</b> <span class="pill muted">${unit(k.amount)} ${PERIOD_WORDS[k.per] || ""}</span>${s.auto ? ` <span class="pill">Credit posted ${usd0.format(s.auto)}</span>` : ""}</div><div class="row-actions">${ctl}</div></div>
+      <div class="track"><b class="fill-${done ? "good" : s.days != null && s.days <= 7 ? "warn" : "good"}" style="width:${pct}%"></b></div>
+      <div class="row-note">${when}${s.ytd ? ` · ${usd0.format(s.ytd.used)} of ${usd0.format(s.ytd.of)} so far this year` : ""}${k.note ? ` · ${esc(k.note)}` : ""}</div>
+    </div>`;
+  };
+  const editRows = a => { const d = rwDoc(`card_${a.id}`) || {};
+    return `<div class="rw-edit">
+      ${rwPerks(a).map(k => `<div class="rw-edit-row"><label><input type="checkbox" data-rw-off="${esc(a.id)}|${esc(k.key)}" ${k.off ? "" : "checked"} ${ro}> ${esc(k.name)}</label>
+        <label>${k.unit === "night" ? "Nights" : "$"}<input type="number" min="0" step="any" id="rwa-${esc(a.id)}-${esc(k.key)}" data-rw-amt="${esc(a.id)}|${esc(k.key)}" value="${k.amount}" ${ro}></label>
+        <span class="meta">${PERIOD_WORDS[k.per] || ""}</span>${k.custom && S.canWrite ? `<button class="btn link" data-rw-delcustom="${esc(a.id)}|${esc(k.key)}">Remove</button>` : ""}</div>`).join("")}
+      ${S.canWrite ? `<form class="add" data-rw-addperk="${esc(a.id)}">
+        <label>New perk<input name="name" required maxlength="50" placeholder="Hotel credit"></label>
+        <label>Amount $<input name="amount" type="number" min="0" step="any" required placeholder="50"></label>
+        <label>Resets<select name="per"><option value="month">Monthly</option><option value="half">Every 6 months</option><option value="year">Yearly (calendar)</option><option value="cardyear">Yearly (card year)</option><option value="4yr">Every 4 years</option></select></label>
+        <button class="btn" type="submit">Add perk</button></form>` : ""}
+      <p class="privacy">Untick a perk that isn't on your card. Amounts come from each card's published terms as of October 2026, so check the issuer's app if one looks off.</p>
+    </div>`; };
+  const cardPanel = a => {
+    const key = rwProduct(a), p = REWARD_CARDS[key], d = rwDoc(`card_${a.id}`) || {}, perks = rwPerks(a).filter(k => !k.off);
+    const needsAnniv = perks.some(k => k.per === "cardyear"), editing = S.rwEdit === a.id;
+    const monthOpts = `<option value="">Renewal month…</option>` + Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${+d.annivMonth === i + 1 ? "selected" : ""}>${new Date(2026, i, 1).toLocaleString("en-US", { month: "long" })}</option>`).join("");
+    return `<section class="panel rw-card">
+      <div class="panel-head"><div><h2 style="font-size:1.05rem">${cardLabel(a)}</h2><p>${p?.prog ? `${esc(REWARD_PROGRAMS[p.prog].name)} · ${esc(earnText(p))}` : "No points on this card"}</p></div>
+        <div class="row-actions">${S.canWrite ? `<select class="cat-select" id="rwp-${esc(a.id)}" data-rw-product="${esc(a.id)}" aria-label="Which card is ${esc(a.name)}">${prodOpts(key)}</select>` : ""}
+        ${needsAnniv && S.canWrite ? `<select class="cat-select" id="rwm-${esc(a.id)}" data-rw-anniv="${esc(a.id)}" aria-label="Renewal month">${monthOpts}</select>` : ""}
+        ${S.canWrite && p ? `<button class="btn link" style="color:var(--accent)" data-rw-edit="${esc(a.id)}">${editing ? "Done" : "Edit perks"}</button>` : ""}</div></div>
+      ${perks.map(k => perkRow(a, { k, s: perkStatus(a, k) })).join("") || (editing ? "" : `<p class="row-note" style="margin:0">No monthly or yearly perks to track.${S.canWrite && p ? " Add one with Edit perks." : ""}</p>`)}
+      ${editing ? editRows(a) : ""}
+    </section>`;
+  };
+  const withPerks = cards.filter(a => rwProduct(a) && rwProduct(a) !== "none" && (rwPerks(a).some(k => !k.off) || S.rwEdit === a.id));
+  withPerks.sort((x, y) => rwPerks(y).reduce((t, k) => t + (k.off || k.unit === "night" ? 0 : k.amount), 0) - rwPerks(x).reduce((t, k) => t + (k.off || k.unit === "night" ? 0 : k.amount), 0));
+  const plain = cards.filter(a => rwProduct(a) && !withPerks.includes(a));
+
+  return `
+  <div class="figures">
+    <div class="fig"><div class="label">Points value</div><div class="value">${withBal ? usd0.format(valueTotal) : "—"}</div><div class="sub">${withBal ? `${withBal} of ${totals.length} programs entered` : "Enter balances below"}</div></div>
+    <div class="fig"><div class="label">Perks used</div><div class="value">${usd0.format(usedNow)}</div><div class="sub">of ${usd0.format(ofNow)} in the current periods</div></div>
+    <div class="fig"><div class="label">Use within 31 days</div><div class="value" style="color:${soon.length ? "var(--warn)" : "inherit"}">${usd0.format(soon.reduce((s, i) => s + i.s.left, 0))}</div><div class="sub">${plural(soon.length, "perk")} reset soon</div></div>
+  </div>
+  ${unknown.length && S.canWrite ? `<section class="panel"><div class="panel-head"><h2>Which cards are these?</h2><p>The bank only sends the cardholder's name</p></div>
+    ${unknown.map(a => `<div class="budget-row"><div class="name">${cardLabel(a)}</div><div class="nums"><select class="cat-select" id="rwp-${esc(a.id)}" data-rw-product="${esc(a.id)}">${prodOpts("")}</select></div></div>`).join("")}</section>` : ""}
+  <div class="cols">
+    <section class="panel">
+      <div class="panel-head"><h2>Use it before it resets</h2><p>Perks with money left</p></div>
+      ${soon.length ? soon.slice(0, 14).map(({ a, k, s }) => `<div class="budget-row"><div class="name">${esc(k.name)} <small style="color:var(--muted);font-weight:400">${esc(a.name)}${a.last4 ? " ·" + esc(a.last4) : ""}</small></div><div class="nums"><b>${usd0.format(s.left)}</b> · ${s.days === 0 ? "today" : `${s.days}d`}</div></div>`).join("") : `<p class="empty">Nothing about to reset unused. Nice.</p>`}
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Points and cash back</h2><p>Banks don't share balances, so type them in from each app</p></div>
+      ${totals.map(t => `<div class="acct" style="grid-template-columns:minmax(0,1fr) auto">
+        <div><div class="payee">${esc(t.prog.name)}</div><div class="meta">${t.cards.map(a => esc(a.last4 || a.name)).join(", ")}${t.asOf ? ` · entered ${fmtDay(t.asOf)}` : ""}${t.asOf && t.earned >= 1 ? ` · ≈ +${fmtPts(t.prog, t.earned)} earned since` : ""}</div></div>
+        <div class="bal">${t.now != null ? fmtPts(t.prog, t.now) : "—"}${t.value != null && t.prog.unit !== "cash" ? `<div class="meta">≈ ${usd0.format(t.value)}</div>` : ""}</div>
+        <div class="edit">${S.canWrite ? `<label>${t.prog.unit === "cash" ? "Balance $" : "Balance"} <input type="number" min="0" step="any" inputmode="decimal" id="rwb-${t.key}" data-rw-bal="${t.key}" value="${t.bal ?? ""}" style="width:110px"></label>${t.prog.unit !== "cash" ? `<label>¢ per ${t.prog.unit === "miles" ? "mile" : "point"} <input type="number" min="0" step="0.05" id="rwc-${t.key}" data-rw-cpp="${t.key}" value="${t.cpp}" style="width:64px"></label>` : ""}` : ""}</div>
+      </div>`).join("") || `<p class="empty">Pick which card each one is to see its program.</p>`}
+      <p class="privacy">"Earned since" is an estimate from each card's purchases and its earn rates. Redemptions and bonuses don't show up, so re-enter the balance now and then.</p>
+    </section>
+  </div>
+  ${withPerks.map(cardPanel).join("")}
+  ${plain.length ? `<section class="panel"><div class="panel-head"><h2>Other cards</h2><p>No credits to track</p></div>
+    ${plain.map(a => { const p = REWARD_CARDS[rwProduct(a)]; return `<div class="budget-row"><div class="name">${cardLabel(a)}<div class="row-note" style="font-weight:400">${p.prog ? esc(earnText(p)) : "No rewards"}</div></div><div class="nums">${S.canWrite ? `<select class="cat-select" id="rwp-${esc(a.id)}" data-rw-product="${esc(a.id)}">${prodOpts(rwProduct(a))}</select> <button class="btn link" style="color:var(--accent)" data-rw-edit="${esc(a.id)}">Add perk</button>` : ""}</div></div>`; }).join("")}</section>` : ""}`;
+}
+function rwSave(id, patch, msg) { write(db => rwDoc(id) ? db.doc(`rewards/${id}`).update(patch) : db.doc(`rewards/${id}`).set(patch), msg); }
+
 /* ---------- fun facts ---------- */
 // Playful stats worked out in the browser from the synced transactions. Nothing is stored.
 const COFFEE = /COFFEE|STARBUCKS|DUTCH BROS|ESPRESSO|PEET'?S|DUNKIN|CARIBOU|SCOOTER'?S|BIGGBY|PHILZ|\bCAFE\b|ROASTER/i;
@@ -1237,6 +1444,7 @@ function financeSnapshot() {
   const nw = homeAccts().reduce((s, a) => s + (+a.balance || 0), 0);
   const series = netWorthSeries(), past = d => series.filter(p => p.d <= d).pop();
   lines.push(`Household net worth (business accounts excluded) now ${usd0.format(nw)}` + [90, 180].map(n => { const p = past(new Date(today - n * 864e5).toISOString().slice(0, 10)); return p ? `; ${n} days ago ${usd0.format(p.v)}` : ""; }).join(""));
+  const rw = rewardsSnapshot(); if (rw.length) lines.push("", "CARD REWARDS (points balances typed in by the household; perks with credit left):", ...rw);
   lines.push("", `HOUSEHOLD SPENDING BY CATEGORY PER MONTH (business accounts, transfers and income excluded; ${monthName(thisMonth)} is partial):`);
   const byMonth = Object.fromEntries(months.map(m => [m, spendByCat(m)]));
   const cats = [...new Set(months.flatMap(m => [...byMonth[m].keys()]))];
@@ -1569,7 +1777,7 @@ function render(force) {
   else if (S.accounts.some(a => a.demo)) notice = `<div class="notice">These are <b>example numbers</b> so you can try the layout. Your real accounts replace them after the first bank sync.</div>`;
   if (!S.db && !S.error) { app.innerHTML = notice + `<div class="empty">Sign in to claude.ai to see the household numbers.</div>`; return; }
   if (!S.ready.accounts || !S.ready.txns) { app.innerHTML = `<div class="empty">Loading your household numbers…</div>`; return; }
-  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, fun: viewFun, biz: viewBiz, ask: viewAsk }[S.tab] || (S.space === "biz" ? viewBiz : viewMonth);
+  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, rewards: viewRewards, fun: viewFun, biz: viewBiz, ask: viewAsk }[S.tab] || (S.space === "biz" ? viewBiz : viewMonth);
   app.innerHTML = notice + v() + detailHtml();
 }
 function renderChip() {
@@ -1626,6 +1834,15 @@ app.addEventListener("click", e => {
   if (e.target.closest("[data-close-detail]")) { closeDetail(); return; }
   const dt = e.target.closest("[data-detail]");
   if (dt && !e.target.closest("input,select,button,a,label")) { openDetail(dt); return; }
+  const rw = e.target.closest("[data-rw-done],[data-rw-undo],[data-rw-edit],[data-rw-delcustom]");
+  if (rw) {
+    if (rw.dataset.rwEdit) { S.rwEdit = S.rwEdit === rw.dataset.rwEdit ? null : rw.dataset.rwEdit; render(true); return; }
+    if (rw.dataset.rwDelcustom) { const [id, k] = rw.dataset.rwDelcustom.split("|"); rwSave(`card_${id}`, { custom: { [k]: null } }, "Perk removed"); return; }
+    const [id, k, per, amt] = (rw.dataset.rwDone || rw.dataset.rwUndo).split("|");
+    const v = rw.dataset.rwUndo ? 0 : amt === "date" ? todayKey : +amt;
+    rwSave(`card_${id}`, { used: { [`${k}_${per}`]: v } }, rw.dataset.rwUndo ? "Undone" : "Marked used");
+    return;
+  }
   const fs = e.target.closest("[data-fun-shuffle]");
   if (fs) { if (fs.dataset.funShuffle === "biz") S.funPickBiz = (S.funShownBiz ?? 0) + 1; else S.funPick = (S.funShown ?? 0) + 1; render(true); return; }
   if (e.target.closest("[data-card-fill]")) { const fills = cardFills(); write(async db => { for (const { a, patch } of fills) await db.doc(`accounts/${a.id}`).update(patch); }, `Filled in ${plural(fills.length, "card")}. Check them against a statement.`); return; }
@@ -1666,6 +1883,16 @@ app.addEventListener("input", e => {
 });
 app.addEventListener("change", e => {
   const t = e.target;
+  if (t.dataset.rwProduct) { rwSave(`card_${t.dataset.rwProduct}`, { product: t.value || null }, "Card saved"); return; }
+  if (t.dataset.rwAnniv) { rwSave(`card_${t.dataset.rwAnniv}`, { annivMonth: t.value ? +t.value : null }, "Renewal month saved"); return; }
+  if (t.dataset.rwUsed) { const [id, k, per] = t.dataset.rwUsed.split("|"); rwSave(`card_${id}`, { used: { [`${k}_${per}`]: Math.max(0, parseFloat(t.value) || 0) } }, "Saved"); return; }
+  if (t.dataset.rwOff || t.dataset.rwAmt) {
+    const [id, k] = (t.dataset.rwOff || t.dataset.rwAmt).split("|"), cur = rwDoc(`card_${id}`)?.perks?.[k] || {};
+    const next = t.dataset.rwOff ? { ...cur, off: !t.checked } : { ...cur, amount: Math.max(0, parseFloat(t.value) || 0) };
+    rwSave(`card_${id}`, { perks: { [k]: next } }, "Saved"); return;
+  }
+  if (t.dataset.rwBal) { const v = t.value === "" ? null : Math.max(0, parseFloat(t.value)); rwSave(`prog_${t.dataset.rwBal}`, { balance: v, asOf: v == null ? null : todayKey }, "Balance saved"); return; }
+  if (t.dataset.rwCpp) { const v = parseFloat(t.value); rwSave(`prog_${t.dataset.rwCpp}`, { cpp: isNaN(v) ? null : v }, "Saved"); return; }
   if (t.id === "catFilter") { S.catFilter = t.value; document.getElementById("txnList").innerHTML = txnTable(S.whereMonth || thisMonth); return; }
   if (t.dataset.cat) {
     const v = parseFloat(t.value), id = slug(t.dataset.cat);
@@ -1715,6 +1942,12 @@ function writeBiz(patch, msg) {
 }
 app.addEventListener("submit", e => {
   const f = e.target;
+  if (f.dataset.rwAddperk) {
+    e.preventDefault();
+    const name = f.elements.name.value.trim(), amount = Math.max(0, parseFloat(f.elements.amount.value) || 0), per = f.elements.per.value;
+    if (name) rwSave(`card_${f.dataset.rwAddperk}`, { custom: { [`c_${slug(name)}`]: { name, amount, per } } }, "Perk added");
+    return;
+  }
   if (f.id === "queueForm") { e.preventDefault(); sendQueued(document.getElementById("askInput").value); return; }
   if (f.id === "askForm") { e.preventDefault(); ask(document.getElementById("askInput").value); return; }
   if (f.id === "invForm") {
@@ -1815,6 +2048,7 @@ async function start() {
   db.collection("balances").orderBy("date", "desc").limit(400).onSnapshot(s => { S.balances = docs(s); render(); }, fail);
   db.collection("budgets").onSnapshot(s => { S.budgets = docs(s); render(); }, fail);
   db.collection("bills").onSnapshot(s => { S.bills = docs(s); render(); }, fail);
+  db.collection("rewards").onSnapshot(s => { S.rewards = docs(s); render(); }, () => {});
   db.collection("questions").orderBy("askedAt", "desc").limit(60).onSnapshot(s => { S.questions = docs(s); if (S.tab === "ask") render(); }, () => {});
   db.doc("meta/sync").onSnapshot(s => { S.meta = s.exists ? s.data() : null; render(); }, () => {});
 }

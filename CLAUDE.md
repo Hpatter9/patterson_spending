@@ -30,13 +30,16 @@ Household and business budget tracker for the Patterson family. Several Claude s
 - `budgets`, `bills`, `rules`: edited on the page. A `rules` doc with `scope: "business"` is a business merchant rule. Picking a business category also moves her other not-yet-picked charges from the same merchant.
 - `invoices`, `mileage`, `taxPayments`, `meta/business`: Business tab.
 - `questions`: the Ask answer queue (see `ASK_QUEUE.md`).
+- `rewards`: card perks and points, edited on the Rewards tab.
+  - `card_<accountId>`: `product`, `annivMonth`, `used{<perk>_<period>}` (a dollar amount, or a date for every-4-years perks), `perks{<perk>: {amount, off}}`, `custom{<key>: {name, amount, per}}`.
+  - `prog_<program>`: `balance`, `asOf`, `cpp`.
 
 **Account types:** checking, savings, credit, loan, investment, and hidden (duplicates or $0 policies, set in `rules.json` → `account_types`).
 
 **Account names:** `rules.json` → `account_names` overrides the names the bank sends, by dashboard id. Example: Chase sends the Ink cards as "H. PATTERSON". The Chase Ink cards are Hunter's and belong on the personal side, not Get In Tune.
 
 **Two sides, picked from the title dropdown** (`SPACES` in `dashboard/index.html`; the choice is remembered per browser):
-- **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Fun Facts, Ask.
+- **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Rewards, Fun Facts, Ask.
 - **Fun Facts** (`viewFun`) is worked out in the browser from synced transactions, so it stores nothing and works on her free account. It has three parts:
   - a fact-of-the-day card with an "Another one" button
   - monthly badges (`funBadges`)
@@ -50,5 +53,11 @@ Household and business budget tracker for the Patterson family. Several Claude s
   - `cardTerms()` estimates them from history: the due day from the day payments usually post, and the APR from the latest interest charge ÷ the average balance in the 31 days of snapshots before it × 365/30.
   - "Fill in estimates" (`cardFills()`) writes only fields that are still empty.
   - Bills shows a Credit cards panel (`cardBillsPanel()`) with each card's next due date and today's balance, and marks it paid when a payment posted in the 4 weeks before.
+- **Rewards** (`viewRewards`) covers every credit card.
+  - `REWARD_CARDS` is the catalog of card products: program, earn rates and perks. A perk has an amount and resets monthly, every 6 months, each calendar year, each card year or every 4 years. Amounts are as of October 2026, so update the catalog when issuers change them.
+  - `CARD_GUESS` picks each card's product from its name. Cards the bank sends only as a cardholder name ("M. WOODS") get picked on the page.
+  - A perk counts as used from whichever is more: matching statement credits on that card (the perk's `match` regex, positive amounts) or what was logged by hand.
+  - Points balances aren't in SimpleFIN, so they're typed in. "Earned since" estimates points from purchases since then × the earn rates.
+  - Ask sees the balances and the perks about to reset (`rewardsSnapshot()`).
 - **Get In Tune also has Fun Facts** (`viewBizFun`): invoices, mileage, profit and badges. It names clients by their code only.
 - Ask is a Claude companion. It runs on the viewer's own account through the page's ability to call Claude. It can propose changes, which save only when the viewer taps Apply.
