@@ -56,7 +56,13 @@ Household and business budget tracker for the Patterson family. Several Claude s
 - **Rewards** (`viewRewards`) covers every credit card.
   - `REWARD_CARDS` is the catalog of card products: program, earn rates and perks. A perk has an amount and resets monthly, every 6 months, each calendar year, each card year or every 4 years. Amounts are as of October 2026, so update the catalog when issuers change them.
   - `CARD_GUESS` picks each card's product from its name. Cards the bank sends only as a cardholder name ("M. WOODS") get picked on the page. Chase business cards, including the Sapphire Reserve for Business (`csrb`), arrive this way.
-  - **Edit card** on each card sets its product, its renewal month (for card-year credits) and a name.
+  - The tab has three views (`S.rwView`):
+    - **Credits:** a "use before it resets" list, then one collapsible block per card.
+    - **Points:** balances by program.
+    - **Cards:** setup items first, then every card with Edit.
+  - **Renewal month** (`rwAnniv()`): a month set on the page wins. Otherwise it's the month the card's ANNUAL MEMBERSHIP FEE last posted. Card-year credits run from the 1st of that month, so July credits on a card renewing in August count toward the previous card year.
+  - Resets are shown as dates ("Resets Aug 1, 2027"). The synced history only goes back about 3 months (`histStart()`), so cards with longer periods say that credits used before then must be marked by hand.
+  - **Edit card** (under Cards) sets the card's product, renewal month and name.
   - **Card names.** The name is saved as `nickname` on the account doc. The sync never writes that field, and the page shows it everywhere in place of the bank's name (`bankName` keeps the original).
   - The Southwest Priority card's $75 travel credit ended in 2025, so it's not in the catalog.
   - A perk counts as used from whichever is more: matching statement credits on that card (the perk's `match` regex, positive amounts) or what was logged by hand.
