@@ -292,6 +292,17 @@ details.rw-card[open] > summary::after { transform: rotate(225deg); margin-top: 
 .rw-edit { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: var(--r); background: var(--surface); }
 .rw-edit-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: .88rem; }
 .rw-edit-row .meta { color: var(--muted); font-size: .8rem; }
+.up { color: var(--s-in); } .down { color: var(--s-out); }
+.fig .value.up, .fig .value.down { font-size: 1.5rem; }
+i.key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin: 0 2px; }
+i.key.up { background: var(--s-in); } i.key.down { background: var(--s-out); }
+small.pct { color: var(--muted); }
+.sg { display: flex; gap: 12px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--line); }
+.sg-body { min-width: 0; display: grid; gap: 4px; }
+.sg-title { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.sg-body p { margin: 0; color: var(--ink-2); font-size: .92rem; }
+.sg-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.pill.sg-hi { background: color-mix(in srgb, var(--warn-fill) 22%, var(--surface)); color: var(--warn); }
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: .85rem; z-index: 30; }
 @media (prefers-reduced-motion: no-preference) { .track b, .hbar .bar, .util b { transition: width .3s ease; } }
 </style>
@@ -315,10 +326,10 @@ const CATEGORIES = ["Groceries","Dining","Shopping","Gas","Transportation","Util
 const NOT_SPENDING = new Set(["Income","Transfer"]);
 // txns = household only; allTxns = every account (last 7 months); bizTxns = business accounts since January 1.
 const SPACES = {
-  home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["rewards", "Rewards"], ["fun", "Fun Facts"], ["ask", "Ask"]] },
+  home: { title: "Patterson Spending", tabs: [["month", "This Month"], ["where", "Where It Goes"], ["worth", "Net Worth & Debt"], ["bills", "Bills"], ["rewards", "Rewards"], ["grow", "Grow"], ["fun", "Fun Facts"], ["ask", "Ask"]] },
   biz: { title: "Get In Tune", sub: "Therapy & coaching for life's big changes", tabs: [["biz:overview", "Overview"], ["biz:invoices", "Invoices"], ["biz:mileage", "Mileage"], ["biz:taxes", "Taxes"], ["biz:setup", "Setup"], ["biz:fun", "Fun Facts"], ["ask", "Ask"]] },
 };
-const S = { rewards: [], rwEdit: null, rwCardEdit: null, rwView: "credits", rwOpen: new Set(), rwLog: null, space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
+const S = { growView: "suggest", rewards: [], rwEdit: null, rwCardEdit: null, rwView: "credits", rwOpen: new Set(), rwLog: null, space: "home", lastTab: { home: "month", biz: "biz:overview" }, chatBy: { home: [], biz: [] }, tab: "month", questions: [], me: null, accounts: [], txns: [], allTxns: [], bizTxns: [], balances: [], budgets: [], bills: [], meta: null, db: null, canWrite: true,
   invoices: [], mileage: [], taxPayments: [], bizMeta: null, bizSub: "overview", bizSearch: "", bizTodo: false,
   ready: { accounts: false, txns: false }, sample: undefined, sampleTools: false, chat: [], draft: "", asking: null, whereMonth: null, search: "", catFilter: "", error: null };
 
@@ -336,7 +347,7 @@ const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDa
 
 try { const sp = localStorage.getItem("ps-space"); if (SPACES[sp]) S.space = sp; const lt = JSON.parse(localStorage.getItem("ps-lasttab") || "null"); if (lt) Object.assign(S.lastTab, lt); } catch (e) {}
 if (/^#(biz|getintune)$/.test(location.hash)) S.space = "biz";
-else if (/^#(month|where|worth|bills|rewards|fun)$/.test(location.hash)) { S.space = "home"; S.lastTab.home = location.hash.slice(1); }
+else if (/^#(month|where|worth|bills|rewards|grow|fun)$/.test(location.hash)) { S.space = "home"; S.lastTab.home = location.hash.slice(1); }
 function setTab(key) { // "month" | "ask" | "biz:invoices" ...
   S.lastTab[S.space] = key;
   if (key.startsWith("biz:")) { S.tab = "biz"; S.bizSub = key.slice(4); } else S.tab = key;
@@ -441,7 +452,7 @@ function monthBars(months, values, current) {
   return s + `</svg>`;
 }
 
-function lineChart(points) {
+function lineChart(points, label = "Net worth over time") {
   const W = 480, H = 210, L = 56, B = 24, T = 12, R = 14;
   if (points.length < 2) return `<p class="empty">The trend line appears after two days of syncs.</p>`;
   const vals = points.map(p => p.v); let lo = Math.min(...vals), hi = Math.max(...vals);
@@ -449,8 +460,10 @@ function lineChart(points) {
   const t0 = +new Date(points[0].d), t1 = +new Date(points[points.length - 1].d);
   const x = d => L + (W - L - R) * ((+new Date(d) - t0) / (t1 - t0 || 1)), y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
   const step = (hi - lo) / 4;
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Net worth over time">`;
-  for (let i = 0; i <= 4; i++) { const v = lo + step * i; s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${short(v)}</text>`; }
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">`;
+  // A narrow range of big numbers needs decimals, or every label rounds to the same $69k.
+  const lab = v => step < 1000 && Math.abs(v) >= 1e4 ? `${v < 0 ? "-" : ""}$${(Math.abs(v) / 1e3).toFixed(step < 100 ? 2 : 1)}k` : short(v);
+  for (let i = 0; i <= 4; i++) { const v = lo + step * i; s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${lab(v)}</text>`; }
   if (lo < 0 && hi > 0) s += `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--ink-2)" stroke-dasharray="3 3"/>`;
   const line = points.map((p, i) => `${i ? "L" : "M"}${x(p.d).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
   s += `<path d="${line} L${x(points[points.length - 1].d)},${H - B} L${L},${H - B} Z" fill="var(--accent)" fill-opacity=".12"/>`;
@@ -1084,6 +1097,140 @@ function viewRewards() {
   ${body}`;
 }
 function rwSave(id, patch, msg) { write(db => rwDoc(id) ? db.doc(`rewards/${id}`).update(patch) : db.doc(`rewards/${id}`).set(patch), msg); }
+
+/* ---------- grow: suggestions and investments ---------- */
+// Suggestions are rules over the household's own numbers, worked out in the browser. They're general guidance, not advice.
+const invAccts = () => homeAccts().filter(a => a.type === "investment");
+function invSeries() { // one point per daily snapshot: the investment accounts' combined value
+  const ids = invAccts().map(a => a.id);
+  return [...S.balances].filter(b => b.balances && ids.some(id => b.balances[id] != null)).sort((a, b) => a.date < b.date ? -1 : 1)
+    .map(b => ({ d: b.date, v: ids.reduce((t, id) => t + (+b.balances[id] || 0), 0), by: b.balances }));
+}
+function changeBars(points) { // day-over-day change between snapshots, up and down from a zero line
+  if (points.length < 3) return `<p class="empty">Daily changes show after a few syncs.</p>`;
+  const diffs = points.slice(1).map((p, i) => ({ d: p.d, from: points[i].d, v: p.v - points[i].v }));
+  const W = 480, H = 190, L = 56, B = 24, T = 10, R = 8, max = Math.max(...diffs.map(x => Math.abs(x.v)), 1);
+  const top = niceTicks(max, 2).pop(), y = v => T + (H - T - B) / 2 * (1 - v / top), slot = (W - L - R) / diffs.length, bw = Math.max(3, Math.min(22, slot - 2));
+  const fmt = d => new Date(d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Change in investment value between syncs">`;
+  for (const t of [top, 0, -top]) s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${t > 0 ? "+" : t < 0 ? "−" : ""}${short(Math.abs(t))}</text>`;
+  diffs.forEach((x, i) => {
+    const cx = L + slot * i + (slot - bw) / 2, h = Math.abs(y(x.v) - y(0)), r = Math.min(4, h, bw / 2), up = x.v >= 0;
+    if (h > 0.5) s += up ? `<path d="M${cx},${y(0)} v${-(h - r)} q0,${-r} ${r},${-r} h${bw - 2 * r} q${r},0 ${r},${r} v${h - r} z" fill="var(--s-in)"/>`
+      : `<path d="M${cx},${y(0)} v${h - r} q0,${r} ${r},${r} h${bw - 2 * r} q${r},0 ${r},${-r} v${-(h - r)} z" fill="var(--s-out)"/>`;
+    const gap = daysBetween(x.from, x.d) > 1 ? ` (${daysBetween(x.from, x.d)} days since ${fmt(x.from)})` : "";
+    s += `<rect class="hit" x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}" data-tip="${esc(fmt(x.d))}: ${up ? "+" : "−"}${esc(usd0.format(Math.abs(x.v)))}${esc(gap)}"/>`;
+  });
+  s += `<text x="${L}" y="${H - 6}">${fmt(diffs[0].d)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${fmt(diffs[diffs.length - 1].d)}</text>`;
+  return s + `</svg>`;
+}
+const signed = v => `${v >= 0 ? "+" : "−"}${usd0.format(Math.abs(v))}`;
+const pct = (v, base) => base ? `${v >= 0 ? "+" : "−"}${Math.abs(v / base * 100).toFixed(2)}%` : "";
+function viewInvest() {
+  const accts = invAccts(), pts = invSeries();
+  if (!accts.length) return `<p class="empty">No investment accounts yet. Mark an account as an investment in sync/rules.json, or add one by hand on Net Worth &amp; Debt.</p>`;
+  const now = accts.reduce((t, a) => t + (+a.balance || 0), 0), last = pts[pts.length - 1], prev = pts[pts.length - 2], first = pts[0];
+  const at = n => [...pts].reverse().find(p => p.d <= addDays(todayKey, -n)) || first;
+  const wk = at(7), mo = at(30);
+  const dayCh = last && prev ? last.v - prev.v : null;
+  const rows = accts.map(a => { const vals = pts.filter(p => p.by[a.id] != null), l = vals[vals.length - 1], p = vals[vals.length - 2], f = vals[0];
+    const stale = a.balanceDate && daysBetween(a.balanceDate, todayKey) >= 4;
+    return `<tr><td class="payee">${esc(a.name)}<small>${esc(a.institution)}${stale ? ` · <span class="s-warn">not updated since ${esc(fmtDay(a.balanceDate))}</span>` : ""}</small></td>
+      <td class="num">${usd0.format(+a.balance || 0)}</td>
+      <td class="num">${l && p ? `<span class="${l.by[a.id] - p.by[a.id] >= 0 ? "up" : "down"}">${signed(l.by[a.id] - p.by[a.id])}</span>` : "—"}</td>
+      <td class="num">${l && f && l !== f ? `<span class="${l.by[a.id] - f.by[a.id] >= 0 ? "up" : "down"}">${signed(l.by[a.id] - f.by[a.id])}</span> <small class="pct">${pct(l.by[a.id] - f.by[a.id], f.by[a.id])}</small>` : "—"}</td></tr>`; }).join("");
+  const fig = (label, v, base, sub) => `<div class="fig"><div class="label">${label}</div><div class="value ${v == null ? "" : v >= 0 ? "up" : "down"}">${v == null ? "—" : signed(v)}</div><div class="sub">${v == null ? sub : `${pct(v, base)} · ${sub}`}</div></div>`;
+  return `
+  <div class="figures">
+    <div class="fig"><div class="label">Invested now</div><div class="value">${usd0.format(now)}</div><div class="sub">${plural(accts.length, "account")}</div></div>
+    ${fig("Latest day", dayCh, prev?.v, prev ? `${fmtDay(prev.d)} → ${fmtDay(last.d)}` : "Needs two syncs")}
+    ${fig("Past week", pts.length > 1 ? last.v - wk.v : null, wk?.v, `since ${fmtDay(wk?.d)}`)}
+    ${fig("Since tracking began", pts.length > 1 ? last.v - first.v : null, first?.v, `since ${fmtDay(first?.d)}`)}
+  </div>
+  <div class="cols">
+    <section class="panel"><div class="panel-head"><h2>Investment value</h2><p>One point per daily sync</p></div>${lineChart(pts, "Investment value over time")}</section>
+    <section class="panel"><div class="panel-head"><h2>Day to day</h2><p>Up <i class="key up"></i> or down <i class="key down"></i> since the sync before</p></div>${changeBars(pts)}</section>
+  </div>
+  <section class="panel"><div class="panel-head"><h2>By account</h2><p>Latest change and change since ${fmtDay(first?.d)}</p></div>
+    <div class="scroll"><table><thead><tr><th>Account</th><th class="num">Value</th><th class="num">Latest day</th><th class="num">Since start</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="privacy">Changes include any money you added or took out, not just market growth. Days with no sync are skipped, so one bar can cover a few days. Hover a bar for its dates.</p>
+  </section>`;
+}
+function monthsBack(n) { return lastMonths(n + 1).slice(0, n); } // the last n full months
+function suggestions() {
+  const out = [], add = (rank, icon, title, why, ask, goto) => out.push({ rank, icon, title, why, ask, goto });
+  const H = homeAccts(), full = monthsBack(3);
+  const spend = full.length ? full.reduce((t, m) => t + total(spendByCat(m)), 0) / full.length : 0;
+  const income = full.length ? full.reduce((t, m) => t + incomeFor(m), 0) / full.length : 0;
+  const checking = H.filter(a => a.type === "checking").reduce((t, a) => t + (+a.balance || 0), 0), savings = H.filter(a => a.type === "savings").reduce((t, a) => t + (+a.balance || 0), 0);
+  const cash = checking + savings, months = spend ? cash / spend : null;
+  const cards = H.filter(a => a.type === "credit" && (+a.balance || 0) < -1), since = addDays(todayKey, -90);
+  const interest = S.txns.filter(t => t.date >= since && t.amount < 0 && CARD_INT.test(`${t.payee || ""} ${t.description || ""}`));
+  const intTotal = -interest.reduce((t, x) => t + x.amount, 0);
+  // 1. card balances that charge interest, highest rate first
+  const charged = cards.map(a => ({ a, apr: a.apr ?? cardTerms(a).apr, int: -interest.filter(t => t.accountId === a.id).reduce((t, x) => t + x.amount, 0) }))
+    .filter(x => x.int > 0 || (x.apr && x.apr > 0 && x.a.apr != null)).sort((x, y) => (y.apr || 0) - (x.apr || 0) || y.int - x.int);
+  if (charged.length) { const top = charged[0];
+    add(100 + (top.apr || 20), "🔥", `Pay down ${top.a.name}${top.a.last4 ? ` ·${top.a.last4}` : ""} first`,
+      `It's carrying ${usd0.format(-top.a.balance)}${top.apr ? ` at about ${top.apr}% APR` : ""}${top.int ? ` and charged ${usd0.format(top.int)} interest in the last 90 days` : ""}. Paying the highest-rate balance first saves the most.${charged.length > 1 ? ` Next: ${charged.slice(1, 3).map(x => esc(x.a.name)).join(", ")}.` : ""}`,
+      `Make me a payoff plan for our credit cards that charge interest, highest APR first, using what we can afford each month.`, "worth"); }
+  if (intTotal >= 25) add(90, "💸", `${usd0.format(intTotal)} in card interest over 90 days`, `That's about ${usd0.format(intTotal * 4)} a year. Paying each statement balance in full by its due date stops new interest. Turning on autopay for the full statement balance makes it automatic.`, `Which cards charged us interest lately, and how do we stop it?`, "bills");
+  // 2. emergency cushion
+  if (months != null && spend > 0) {
+    if (months < 3) add(85, "🛟", "Build an emergency cushion", `Your cash covers about ${months.toFixed(1)} months of spending (${usd0.format(spend)} a month on average). A common target is 3–6 months, about ${usd0.format(spend * 3)}–${usd0.format(spend * 6)}, kept in savings.`, `How fast could we build a 3-month emergency fund, and which spending should we trim to get there?`, "worth");
+    else if (checking > spend * 2 && savings < spend * 3) add(60, "🏦", "Move extra checking into savings", `Checking holds about ${usd0.format(checking)}, roughly ${(checking / spend).toFixed(1)} months of spending. Keep about a month there for bills and move the rest, around ${usd0.format(checking - spend)}, to a high-yield savings account so it earns interest.`, `How much should we keep in checking, and how much should we move to savings or investments?`, "worth");
+    else if (months > 8) add(55, "📈", "Put idle cash to work", `You have about ${months.toFixed(0)} months of spending in cash. Beyond a 6-month cushion (${usd0.format(spend * 6)}), the extra ${usd0.format(cash - spend * 6)} could go toward retirement accounts or other long-term investing.`, `We have more cash than our emergency fund needs. What are sensible options for the extra?`, "grow:invest");
+    else add(20, "✅", "Emergency cushion looks healthy", `Cash covers about ${months.toFixed(1)} months of spending, inside the usual 3–6 month range.`, null, "worth");
+  }
+  // 3. monthly surplus or gap
+  if (income > 0 && spend > 0) { const gap = income - spend;
+    if (gap < 0) add(95, "⚠️", "Spending is running ahead of income", `Over the last ${full.length} months you averaged ${usd0.format(spend)} out and ${usd0.format(income)} in, a gap of about ${usd0.format(-gap)} a month. Start with your biggest categories.`, `Our spending has been higher than our income. Where are the easiest places to cut?`, "where");
+    else if (gap > 100) add(50, "🧭", `Give your ${usd0.format(gap)}/month surplus a job`, `You averaged ${usd0.format(income)} in and ${usd0.format(spend)} out over the last ${full.length} months. A common order: card debt with interest, then a 3–6 month cushion, then retirement accounts like your Roth IRAs, then other goals.`, `We have about ${usd0.format(gap)} a month left over. Suggest how to split it between debt, savings and investing.`, null); }
+  // 4. category creeping up
+  const cats = new Map(); for (const m of full) for (const [c, v] of spendByCat(m)) cats.set(c, (cats.get(c) || 0) + v / full.length);
+  const thisM = spendByCat(thisMonth), frac = today.getDate() / daysInMonth;
+  const creep = [...thisM].filter(([c, v]) => (cats.get(c) || 0) > 50 && v / frac > (cats.get(c) || 0) * 1.3 && today.getDate() >= 8).sort((a, b) => (b[1] / frac - (cats.get(b[0]) || 0)) - (a[1] / frac - (cats.get(a[0]) || 0)))[0];
+  if (creep) add(65, "📊", `${creep[0]} is on pace to run high`, `At this pace ${esc(creep[0].toLowerCase())} lands near ${usd0.format(creep[1] / frac)} this month, compared with ${usd0.format(cats.get(creep[0]))} on average.`, `Why is our ${creep[0]} spending higher this month?`, "month");
+  // 5. budgets over
+  const over = S.budgets.filter(b => +b.limit > 0 && (thisM.get(b.category) || 0) > +b.limit);
+  if (over.length) add(70, "🎯", `${plural(over.length, "budget")} over this month`, `${over.map(b => `${esc(b.category)} (${usd0.format(thisM.get(b.category) || 0)} of ${usd0.format(b.limit)})`).join(", ")}.`, `We're over budget on ${over.map(b => b.category).join(" and ")}. How can we get back on track for the rest of the month?`, "month");
+  // 6. subscriptions
+  const subs = S.txns.filter(t => t.date >= since && t.category === "Subscriptions" && t.amount < 0);
+  const subYear = -subs.reduce((t, x) => t + x.amount, 0) / 3 * 12;
+  if (subYear >= 300) { const names = [...new Set(subs.map(payeeOf))]; add(45, "📺", `Subscriptions run about ${usd0.format(subYear)} a year`, `${plural(names.length, "service")} in the last 90 days, including ${names.slice(0, 4).map(esc).join(", ")}. Cancelling one or two you rarely use adds up.`, `List our subscriptions and what each costs a year, and point out likely duplicates.`, "where"); }
+  // 7. card credits about to reset
+  const rw = []; for (const a of rwCards()) for (const k of rwPerks(a)) if (!k.off && k.unit !== "night" && k.per !== "4yr") { const s = perkStatus(a, k); if (s.left > 0 && s.per.end && daysBetween(todayKey, s.per.end) <= 31) rw.push({ a, k, s }); }
+  const rwLeft = rw.reduce((t, x) => t + x.s.left, 0);
+  if (rwLeft >= 10) add(75, "🎁", `Use ${usd0.format(rwLeft)} in card credits before they reset`, `${rw.slice(0, 4).map(x => `${esc(x.k.name)} (${usd0.format(x.s.left)})`).join(", ")}${rw.length > 4 ? ` and ${rw.length - 4} more` : ""}. These are free money only if you use them.`, null, "rewards");
+  // 8. utilization
+  const lim = H.filter(a => a.type === "credit" && +a.limit > 0), used = -lim.reduce((t, a) => t + Math.min(0, +a.balance || 0), 0), cap = lim.reduce((t, a) => t + +a.limit, 0);
+  if (cap && used / cap > 0.3) add(55, "💳", `Card utilization is ${Math.round(used / cap * 100)}%`, `Credit scoring favors keeping balances under 30% of limits. Paying cards down before the statement closes lowers the reported balance.`, null, "worth");
+  // 9. loans with a high rate
+  const loans = H.filter(a => a.type === "loan" && a.apr >= 7);
+  if (loans.length) add(70, "🏠", `Extra payments on ${loans[0].name} save the most`, `At ${loans[0].apr}% APR, every extra dollar there earns a guaranteed ${loans[0].apr}%, which is hard to beat.`, `If we add $100 a month to ${loans[0].name}, how much sooner is it paid off and how much interest do we save?`, "worth");
+  // 10. investments that stopped updating
+  const staleInv = invAccts().filter(a => a.balanceDate && daysBetween(a.balanceDate, todayKey) >= 7);
+  if (staleInv.length) add(40, "🔌", `${staleInv.map(a => esc(a.institution)).filter((v, i, l) => l.indexOf(v) === i).join(" and ")} stopped updating`, `${plural(staleInv.length, "investment account")} last updated ${fmtDay(staleInv[0].balanceDate)}. Reconnect it in SimpleFIN (simplefin.org → My Account → Connections) so growth tracking stays accurate.`, null, "grow:invest");
+  return out.sort((a, b) => b.rank - a.rank);
+}
+function viewSuggest() {
+  const list = suggestions();
+  const tag = r => r >= 85 ? `<span class="pill sg-hi">Do first</span>` : r >= 55 ? `<span class="pill">Worth doing</span>` : `<span class="pill muted">Good to know</span>`;
+  return `
+  <section class="panel"><div class="panel-head"><h2>What to do with your money</h2><p>Ranked by impact, from your own numbers</p></div>
+    ${list.map(x => `<div class="sg">
+      <span class="fun-icon" aria-hidden="true">${x.icon}</span>
+      <div class="sg-body"><div class="sg-title"><b>${esc(x.title)}</b>${tag(x.rank)}</div><p>${x.why}</p>
+        <div class="sg-actions">${x.ask ? `<button class="btn" data-sg-ask="${esc(x.ask)}">Ask Claude about this</button>` : ""}${x.goto ? `<button class="btn link" style="color:var(--accent)" data-sg-goto="${esc(x.goto)}">See the numbers ›</button>` : ""}</div></div>
+    </div>`).join("") || `<p class="empty">No suggestions right now. Check back after a few more syncs.</p>`}
+    <p class="privacy">These are general rules of thumb worked out from your synced accounts, not professional financial advice. For big decisions, like investing a large amount or refinancing, talk to a fee-only advisor.</p>
+  </section>`;
+}
+function viewGrow() {
+  const v = S.growView || "suggest";
+  return `<div class="seg rw-seg" role="group" aria-label="Grow view">${[["suggest", "Suggestions"], ["invest", "Investments"]].map(([k, l]) => `<button aria-pressed="${v === k}" data-grow-view="${k}">${l}</button>`).join("")}</div>
+  ${v === "invest" ? viewInvest() : viewSuggest()}`;
+}
 
 /* ---------- fun facts ---------- */
 // Playful stats worked out in the browser from the synced transactions. Nothing is stored.
@@ -1869,7 +2016,7 @@ function render(force) {
   else if (S.accounts.some(a => a.demo)) notice = `<div class="notice">These are <b>example numbers</b> so you can try the layout. Your real accounts replace them after the first bank sync.</div>`;
   if (!S.db && !S.error) { app.innerHTML = notice + `<div class="empty">Sign in to claude.ai to see the household numbers.</div>`; return; }
   if (!S.ready.accounts || !S.ready.txns) { app.innerHTML = `<div class="empty">Loading your household numbers…</div>`; return; }
-  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, rewards: viewRewards, fun: viewFun, biz: viewBiz, ask: viewAsk }[S.tab] || (S.space === "biz" ? viewBiz : viewMonth);
+  const v = { month: viewMonth, where: viewWhere, worth: viewWorth, bills: viewBills, rewards: viewRewards, grow: viewGrow, fun: viewFun, biz: viewBiz, ask: viewAsk }[S.tab] || (S.space === "biz" ? viewBiz : viewMonth);
   app.innerHTML = notice + v() + detailHtml();
 }
 function renderChip() {
@@ -1926,6 +2073,9 @@ app.addEventListener("click", e => {
   if (e.target.closest("[data-close-detail]")) { closeDetail(); return; }
   const dt = e.target.closest("[data-detail]");
   if (dt && !e.target.closest("input,select,button,a,label")) { openDetail(dt); return; }
+  const gv = e.target.closest("[data-grow-view]"); if (gv) { S.growView = gv.dataset.growView; render(true); return; }
+  const sga = e.target.closest("[data-sg-ask]"); if (sga) { setTab("ask"); S.draft = sga.dataset.sgAsk; render(true); window.scrollTo({ top: 0 }); document.getElementById("askInput")?.focus(); return; }
+  const sgg = e.target.closest("[data-sg-goto]"); if (sgg) { const g = sgg.dataset.sgGoto; if (g === "grow:invest") S.growView = "invest"; else setTab(g); render(true); window.scrollTo({ top: 0 }); return; }
   const rv = e.target.closest("[data-rw-view]"); if (rv) { S.rwView = rv.dataset.rwView; S.rwCardEdit = null; render(true); return; }
   const sm = e.target.closest("summary[data-rw-card]");
   if (sm) { const id = sm.dataset.rwCard; if (sm.parentElement.open) S.rwOpen.delete(id); else S.rwOpen.add(id); return; }

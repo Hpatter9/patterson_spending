@@ -39,7 +39,7 @@ Household and business budget tracker for the Patterson family. Several Claude s
 **Account names:** `rules.json` → `account_names` overrides the names the bank sends, by dashboard id. Example: Chase sends the Ink cards as "H. PATTERSON". The Chase Ink cards are Hunter's and belong on the personal side, not Get In Tune.
 
 **Two sides, picked from the title dropdown** (`SPACES` in `dashboard/index.html`; the choice is remembered per browser):
-- **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Rewards, Fun Facts, Ask.
+- **Patterson Spending** (personal): This Month, Where It Goes, Net Worth & Debt, Bills, Rewards, Grow, Fun Facts, Ask.
 - **Fun Facts** (`viewFun`) is worked out in the browser from synced transactions, so it stores nothing and works on her free account. It has three parts:
   - a fact-of-the-day card with an "Another one" button
   - monthly badges (`funBadges`)
@@ -68,5 +68,23 @@ Household and business budget tracker for the Patterson family. Several Claude s
   - A perk counts as used from whichever is more: matching statement credits on that card (the perk's `match` regex, positive amounts) or what was logged by hand.
   - Points balances aren't in SimpleFIN, so they're typed in. "Earned since" estimates points from purchases since then × the earn rates.
   - Ask sees the balances and the perks about to reset (`rewardsSnapshot()`).
+- **Grow** (`viewGrow`) has two views (`S.growView`).
+  - **Suggestions** (`suggestions()`): rule-based tips from the household's own numbers, ranked "Do first" / "Worth doing" / "Good to know". They cover:
+    - card balances charging interest (highest APR first) and recent interest paid
+    - emergency cushion in months of spending, and idle checking
+    - monthly surplus or gap over the last 3 full months
+    - a category on pace to run high, and budgets already over
+    - subscriptions
+    - card credits about to reset
+    - card utilization, high-rate loans, and investment accounts that stopped updating
+
+    Each tip can open Ask with a question filled in (`data-sg-ask`). They're general guidance, not financial advice, and the page says so.
+  - **Investments** (`viewInvest`):
+    - household `investment` accounts summed per daily snapshot (`invSeries()`), shown as a value line chart
+    - a day-to-day change bar chart (`changeBars()`)
+    - latest-day, past-week and since-start changes
+    - a per-account table that flags accounts not updated for 4+ days
+
+    Changes include contributions and withdrawals, and days without a sync are skipped.
 - **Get In Tune also has Fun Facts** (`viewBizFun`): invoices, mileage, profit and badges. It names clients by their code only.
 - Ask is a Claude companion. It runs on the viewer's own account through the page's ability to call Claude. It can propose changes, which save only when the viewer taps Apply.
