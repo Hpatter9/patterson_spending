@@ -1844,7 +1844,7 @@ function askUnavailable() {
   return `<section class="panel"><h2>Ask about your money</h2><p class="intro">${why}</p>${S.perms ? `<div><button class="btn" id="permsBtn">Check permissions</button></div>` : ""}</section>`;
 }
 /* ---------- answer queue: Ask for viewers whose account can't call Claude live ---------- */
-// The page saves a complete prompt; an hourly routine on the owner's account answers it (see ASK_QUEUE.md).
+// The page saves a complete prompt; a routine on the owner's account answers it three times a day (see ASK_QUEUE.md).
 const QUEUE_ACTIONS_HELP = `
 You cannot call tools in this mode. If the person asks for a change (or clearly agrees to one), propose it by ending your reply with a fenced block that starts with \`\`\`actions and contains a JSON array like:
 [{"tool": "propose_set_budget", "input": {"category": "Dining", "monthly_limit": 400}}]
@@ -1883,7 +1883,7 @@ function viewQueue() {
     const acts = q.status === "answered" ? actionsFor(q) : [];
     const answer = q.status === "answered" ? md(q.answer || "")
       : q.status === "error" ? `<p class="msg-err">${esc(q.message || "This one couldn't be answered. Try asking again.")}</p>`
-      : `<span class="thinking">Waiting for an answer. Usually within the hour, 7am to 10pm.</span>`;
+      : `<span class="thinking">Waiting for an answer. Answers come in around 8am, 1pm and 7pm.</span>`;
     const actsHtml = acts.length ? `<div class="proposals">${acts.map((a, j) => `<div class="proposal ${a.state}"><span>${esc(a.label)}</span>${
       a.state === "pending" && S.canWrite ? `<span class="proposal-btns"><button class="btn primary" data-qapply="${esc(q.id)}:${j}">Apply</button><button class="btn" data-qdismiss="${esc(q.id)}:${j}">Dismiss</button></span>`
       : `<span class="proposal-state">${a.state === "applied" ? "Applied" : a.state === "dismissed" ? "Dismissed" : a.state === "failed" ? "Couldn't save" : ""}</span>`}</div>`).join("")}</div>` : "";
@@ -1892,7 +1892,7 @@ function viewQueue() {
   const sugg = S.space === "biz" ? BIZ_SUGGESTIONS : SUGGESTIONS;
   return `<section class="panel ask">
     <div class="panel-head"><h2>Ask about your money</h2><p>Answered by Claude on the household's main account</p></div>
-    <div class="thread" id="thread">${thread || `<p class="intro">Live answers aren't available on this Claude account, so your questions go to Claude on the household's main account. Answers appear here, usually within the hour between 7am and 10pm. You can ask about spending, bills, Get In Tune's numbers, or ask for changes like a new budget. Changes wait for you to tap Apply.</p>`}</div>
+    <div class="thread" id="thread">${thread || `<p class="intro">Live answers aren't available on this Claude account, so your questions go to Claude on the household's main account. Answers appear here three times a day, around 8am, 1pm and 7pm. You can ask about spending, bills, Get In Tune's numbers, or ask for changes like a new budget. Changes wait for you to tap Apply.</p>`}</div>
     ${qs.length ? "" : `<div class="chips">${sugg.map(s => `<button class="chip-btn" data-qsuggest="${esc(s)}">${esc(s)}</button>`).join("")}</div>`}
     ${S.canWrite ? `<form class="composer" id="queueForm">
       <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. How much did we spend on dining in September?" aria-label="Your question">${esc(S.draft)}</textarea>

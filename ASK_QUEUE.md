@@ -1,6 +1,6 @@
 # Ask answer queue
 
-Some viewers' Claude accounts can't run the dashboard's live Ask (for example a free plan). For them, the Ask tab saves each question to the `questions` collection. An hourly routine on the owner's account answers it, in the "Patterson Spending sync runner" session from 7am to 10pm Mountain.
+Some viewers' Claude accounts can't run the dashboard's live Ask (for example a free plan). For them, the Ask tab saves each question to the `questions` collection. A routine on the owner's account answers it three times a day (7:52am, 12:52pm and 6:52pm Mountain), in the "Patterson Spending sync runner" session.
 
 The page builds each question's full prompt itself: companion rules, a snapshot of the dashboard's numbers, recent questions and answers, and the question. The answer is then based on the same numbers the person was looking at.
 
