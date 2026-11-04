@@ -60,7 +60,8 @@ Household and business budget tracker for the Patterson family. Several Claude s
     - **Credits:** a "use before it resets" list, then one collapsible block per card.
     - **Points:** balances by program.
     - **Cards:** setup items first, then every card with Edit.
-  - **Renewal month** (`rwAnniv()`): a month set on the page wins. Otherwise it's the month the card's ANNUAL MEMBERSHIP FEE last posted. Card-year credits run from the 1st of that month, so July credits on a card renewing in August count toward the previous card year.
+  - **Card year start** (`rwAnniv()`): a month set on the page wins, and the year starts on the 1st of it. Otherwise the start is estimated as 30 days before the card's last ANNUAL MEMBERSHIP FEE. Chase charges the fee on the first statement *after* the anniversary, so the Sapphire Reserve ·1983's Aug 1 fee means its card year began in early July. Its three July travel credits (exactly $300) belong to the current card year. Estimated resets say "around".
+  - **Travel credits applied automatically** (`autoTravel` on the Sapphire Reserve and Reserve for Business): if travel charges (`TRAVELISH`: Travel category, rideshare, parking, tolls, transit) of $25 or more, at least 5 days old, posted after the last credit and got no credit, the $300 is treated as used up (`travelUsedUp()`). The page explains why.
   - Resets are shown as dates ("Resets Aug 1, 2027"). The synced history only goes back about 3 months (`histStart()`), so cards with longer periods say that credits used before then must be marked by hand.
   - **Edit card** (under Cards) sets the card's product, renewal month and name.
   - **Card names.** The name is saved as `nickname` on the account doc. The sync never writes that field, and the page shows it everywhere in place of the bank's name (`bankName` keeps the original).

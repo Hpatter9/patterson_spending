@@ -861,7 +861,7 @@ const REWARD_PROGRAMS = {
 const GE = { key: "ge", name: "Global Entry / TSA PreCheck", amount: 120, per: "4yr", match: /GLOBAL ENTRY|TSA ?PRE/i };
 const REWARD_CARDS = {
   csr: { name: "Chase Sapphire Reserve", prog: "ur", earn: { Dining: 3, Travel: 4 }, base: 1, perks: [
-    { key: "travel", name: "Travel credit", amount: 300, per: "cardyear", match: /TRAVEL CREDIT/i, note: "Any travel purchase counts" },
+    { key: "travel", name: "Travel credit", amount: 300, per: "cardyear", autoTravel: true, match: /TRAVEL CREDIT/i, note: "Any travel purchase counts" },
     { key: "edit", name: "The Edit hotel credit", amount: 500, per: "year", match: /THE EDIT/i, note: "Up to $250 per prepaid 2-night stay booked through The Edit" },
     { key: "dining", name: "Exclusive Tables dining", amount: 150, per: "half", match: /DINING CREDIT|EXCLUSIVE TABLES/i, note: "Sapphire Reserve Exclusive Tables restaurants on OpenTable" },
     { key: "stubhub", name: "StubHub / viagogo", amount: 150, per: "half", match: /STUBHUB|VIAGOGO/i, note: "Activate in the Chase app first" },
@@ -870,7 +870,7 @@ const REWARD_CARDS = {
     { key: "peloton", name: "Peloton membership", amount: 10, per: "month", match: /PELOTON.*CREDIT/i, note: "Through 2027" },
     GE] },
   csrb: { name: "Chase Sapphire Reserve for Business", prog: "ur", earn: {}, base: 1, perks: [
-    { key: "travel", name: "Travel credit", amount: 300, per: "cardyear", match: /TRAVEL CREDIT/i, note: "Any travel purchase counts" },
+    { key: "travel", name: "Travel credit", amount: 300, per: "cardyear", autoTravel: true, match: /TRAVEL CREDIT/i, note: "Any travel purchase counts" },
     { key: "edit", name: "The Edit hotel credit", amount: 500, per: "year", match: /THE EDIT/i, note: "Prepaid 2-night stays through Chase Travel. Chase's page lists $250 through 2026, so check yours" },
     { key: "ziprecruiter", name: "ZipRecruiter", amount: 200, per: "half", match: /ZIPRECRUITER/i },
     { key: "gworkspace", name: "Google Workspace", amount: 200, per: "year", match: /GOOGLE.*(WORKSPACE|GSUITE)/i },
@@ -916,32 +916,46 @@ function rwPerks(a) {
   return all.map(k => ({ ...k, amount: d.perks?.[k.key]?.amount ?? k.amount, off: !!d.perks?.[k.key]?.off }));
 }
 const lastDay = (y, m) => `${y}-${pad(m)}-${pad(new Date(y, m, 0).getDate())}`;
-function perkPeriod(per, annivMonth, at = todayKey) {
+function perkPeriod(per, anniv, at = todayKey) {
+  const annivMonth = typeof anniv === "object" ? anniv?.month : anniv, annivDay = typeof anniv === "object" ? anniv?.day || 1 : 1;
   const y = +at.slice(0, 4), m = +at.slice(5, 7);
   if (per === "month") return { key: at.slice(0, 7), start: `${at.slice(0, 7)}-01`, end: lastDay(y, m), label: monthName(at.slice(0, 7)).split(" ")[0] };
   if (per === "half") return m <= 6 ? { key: `${y}H1`, start: `${y}-01-01`, end: `${y}-06-30`, label: `Jan–Jun ${y}` } : { key: `${y}H2`, start: `${y}-07-01`, end: `${y}-12-31`, label: `Jul–Dec ${y}` };
   if (per === "4yr") return { key: "4y", start: addDays(at, -1461), end: null, label: "last 4 years" };
   if (per === "cardyear" && annivMonth) {
-    const sy = m >= annivMonth ? y : y - 1, start = `${sy}-${pad(annivMonth)}-01`;
-    return { key: `cy${sy}`, start, end: addDays(`${sy + 1}-${pad(annivMonth)}-01`, -1), label: `card year from ${monthName(start.slice(0, 7), "short")} ${sy}` };
+    const md = `${pad(annivMonth)}-${pad(annivDay)}`, sy = at.slice(5) >= md ? y : y - 1, start = `${sy}-${md}`;
+    return { key: `cy${sy}`, start, end: addDays(`${sy + 1}-${md}`, -1), approx: !!anniv?.approx, label: `card year from ${fmtDay(start)}, ${sy}` };
   }
   return { key: `${y}`, start: `${y}-01-01`, end: `${y}-12-31`, label: per === "cardyear" ? `${y} (set the renewal month for the card year)` : `${y}` };
+}
+// Charges the Sapphire Reserve travel credit covers on its own: travel, rideshare, parking, tolls, transit.
+const TRAVELISH = t => t.category === "Travel" || /LYFT|UBER\s+\*TRIP|PARKING|PARKMOBILE|PMUSA|TOLL|AMTRAK|RTD /i.test(`${t.payee || ""} ${t.description || ""}`);
+function travelUsedUp(a, k, per) { // travel charges since the last credit (5+ days old) that never got credited
+  const from = per.start > histStart() ? per.start : histStart(), cutoff = addDays(todayKey, -5);
+  const credits = S.allTxns.filter(t => t.accountId === a.id && t.amount > 0 && t.date >= from && k.match.test(`${t.payee || ""} ${t.description || ""}`)).map(t => t.date).sort();
+  const after = credits.length ? credits[credits.length - 1] : addDays(from, -1);
+  const missed = S.allTxns.filter(t => t.accountId === a.id && t.amount < 0 && t.date > after && t.date <= cutoff && TRAVELISH(t)).sort((x, y) => x.date < y.date ? -1 : 1);
+  const total = -missed.reduce((s, t) => s + t.amount, 0);
+  return total >= 25 ? { since: missed[0].date, total, n: missed.length } : null;
 }
 function perkCredits(a, k, start, end) {
   if (!k.match) return 0;
   return S.allTxns.filter(t => t.accountId === a.id && t.amount > 0 && t.date >= start && (!end || t.date <= end) && k.match.test(`${t.payee || ""} ${t.description || ""}`)).reduce((s, t) => s + t.amount, 0);
 }
 function perkStatus(a, k) {
-  const d = rwDoc(`card_${a.id}`) || {}, per = perkPeriod(k.per, rwAnniv(a).month), logged = d.used?.[`${k.key}_${per.key}`];
+  const d = rwDoc(`card_${a.id}`) || {}, per = perkPeriod(k.per, rwAnniv(a)), logged = d.used?.[`${k.key}_${per.key}`];
   const manual = k.per === "4yr" ? (typeof logged === "string" && logged >= per.start ? k.amount : 0) : +logged || 0;
-  const auto = perkCredits(a, k, per.start, per.end), used = Math.min(k.amount, Math.max(auto, manual));
+  const auto = perkCredits(a, k, per.start, per.end);
+  let used = Math.min(k.amount, Math.max(auto, manual)), inferred = null;
+  if (k.autoTravel && used < k.amount && !manual) inferred = travelUsedUp(a, k, per);
+  if (inferred) used = k.amount;
   let ytd = null;
   if (k.per === "month" || k.per === "half") { // this calendar year so far
     const keys = k.per === "month" ? lastMonths(today.getMonth() + 1).map(m => `${m}-15`) : [`${year}-03-15`, ...(today.getMonth() >= 6 ? [`${year}-09-15`] : [])];
     ytd = keys.reduce((s, at) => { const p = perkPeriod(k.per, null, at); return s + Math.min(k.amount, Math.max(perkCredits(a, k, p.start, p.end), +d.used?.[`${k.key}_${p.key}`] || 0)); }, 0);
     ytd = { used: ytd, of: k.amount * keys.length };
   }
-  return { per, used, auto, manual, left: k.amount - used, days: per.end ? daysBetween(todayKey, per.end) : null, ytd, usedOn: k.per === "4yr" && typeof logged === "string" ? logged : null };
+  return { per, used, auto, manual, inferred, left: k.amount - used, days: per.end ? daysBetween(todayKey, per.end) : null, ytd, usedOn: k.per === "4yr" && typeof logged === "string" ? logged : null };
 }
 function programTotals() {
   const out = new Map();
@@ -969,16 +983,19 @@ function rewardsSnapshot() { // for Ask
 // Renewal month: what was set on the page, else the month the card's annual fee last posted (fees post on the anniversary).
 function rwAnniv(a) {
   const d = rwDoc(`card_${a.id}`) || {};
-  if (d.annivMonth) return { month: +d.annivMonth, source: "set" };
+  if (d.annivMonth) return { month: +d.annivMonth, day: 1, source: "set" };
   const fee = S.allTxns.filter(t => t.accountId === a.id && t.amount < 0 && /ANNUAL (MEMBERSHIP )?FEE/i.test(`${t.payee || ""} ${t.description || ""}`)).sort((x, y) => x.date < y.date ? 1 : -1)[0];
-  return fee ? { month: +fee.date.slice(5, 7), source: "fee", date: fee.date } : { month: null, source: null };
+  if (!fee) return { month: null, source: null };
+  // Chase and others charge the fee on the first statement after the anniversary, so the card year began up to a month earlier.
+  const start = addDays(fee.date, -30);
+  return { month: +start.slice(5, 7), day: Math.min(28, +start.slice(8, 10)), source: "fee", date: fee.date, approx: true };
 }
 const histStart = () => S.allTxns.reduce((m, t) => t.date && t.date < m ? t.date : m, todayKey);
 const fmtDayY = k => new Date(k + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", ...(k.slice(0, 4) !== String(year) ? { year: "numeric" } : {}) });
 function resetText(s) {
   if (!s.per.end) return "";
   const next = addDays(s.per.end, 1), n = daysBetween(todayKey, next);
-  return `Resets ${fmtDayY(next)}${n <= 45 ? ` · ${plural(n, "day")}` : ""}`;
+  return `Resets ${s.per.approx ? "around " : ""}${fmtDayY(next)}${n <= 45 ? ` · ${plural(n, "day")}` : ""}`;
 }
 const PER_LABEL = { month: "per month", half: "per half-year (Jan–Jun, Jul–Dec)", year: "per calendar year", cardyear: "per card year", "4yr": "every 4 years" };
 function viewRewards() {
@@ -1003,7 +1020,7 @@ function viewRewards() {
     const night = k.unit === "night", amt = n => night ? plural(n, "night") : usd0.format(n), done = s.left <= 0, id = `${a.id}|${k.key}|${s.per.key}`;
     const pct = k.amount ? Math.min(100, s.used / k.amount * 100) : 0, soonish = s.per.end && daysBetween(todayKey, s.per.end) <= 7;
     const status = k.per === "4yr" ? (s.used ? `Used${s.usedOn ? ` ${fmtDayY(s.usedOn)}` : ""} · available again ${s.usedOn ? fmtDayY(addDays(s.usedOn, 1461)) : "within 4 years"}` : "Not used in the last 4 years") : resetText(s);
-    const notes = [s.auto ? `${usd0.format(s.auto)} credit posted` : "", s.manual && !s.auto ? `${amt(s.manual)} logged` : "",
+    const notes = [s.inferred ? `Looks used up: ${usd0.format(s.inferred.total)} of travel since ${fmtDay(s.inferred.since)} got no credit${s.auto ? ` (after ${usd0.format(s.auto)} in credits this card year)` : ""}` : s.auto ? `${usd0.format(s.auto)} credit posted` : "", s.manual && !s.auto ? `${amt(s.manual)} logged` : "",
       k.note || ""].filter(Boolean);
     const logging = S.rwLog === id;
     const actions = !S.canWrite ? "" : done ? (s.manual ? `<button class="btn link" data-rw-undo="${esc(id)}">Undo</button>` : "")
@@ -1025,7 +1042,7 @@ function viewRewards() {
     const open = S.rwOpen?.has(a.id) || S.rwEdit === a.id;
     return `<details class="rw-card" ${open ? "open" : ""}>
       <summary data-rw-card="${esc(a.id)}">
-        <div class="rw-card-name"><b>${nameOf(a)}</b><small>${esc(p.name)}${an.month ? ` · renews ${new Date(2026, an.month - 1, 1).toLocaleString("en-US", { month: "long" })}${an.source === "fee" ? " (from its annual fee)" : ""}` : ""}</small></div>
+        <div class="rw-card-name"><b>${nameOf(a)}</b><small>${esc(p.name)}${an.month ? ` · card year starts ${an.source === "fee" ? `around ${fmtDay(`2026-${pad(an.month)}-${pad(an.day)}`)} (a month before its annual fee posted)` : new Date(2026, an.month - 1, 1).toLocaleString("en-US", { month: "long" }) + " 1"}` : ""}</small></div>
         <div class="rw-card-sum"><b>${usd0.format(left)}</b><small>left of ${usd0.format(of)}</small></div>
       </summary>
       <div class="rw-card-body">
